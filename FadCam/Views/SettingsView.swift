@@ -1,0 +1,162 @@
+import SwiftUI
+import Photos
+
+struct SettingsView: View {
+    @AppStorage("saveToPhotos") private var saveToPhotos = false
+    @AppStorage("resumeOnboarding") private var resumeOnboarding = false
+    @State private var showingAlert = false
+    @State private var alertMessage = ""
+    @State private var showGitHubLink = false
+    @State private var showWebsiteLink = false
+
+    var body: some View {
+        NavigationView {
+            Form {
+                Section {
+                    Toggle(isOn: $saveToPhotos) {
+                        Label("Save to Photos", systemImage: "photo.on.rectangle")
+                    }
+                    .onChange(of: saveToPhotos) { newValue in if newValue { requestPhotoPermission() } }
+                    .tint(.red)
+                } header: { Text("Storage") }
+                footer: { Text("Automatically save recordings to your Photos library.") }
+
+                Section {
+                    Toggle(isOn: $resumeOnboarding) {
+                        Label("Show Onboarding Again", systemImage: "arrow.counterclockwise")
+                    }
+                    .onChange(of: resumeOnboarding) { newValue in
+                        if newValue { DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) { resumeOnboarding = false } }
+                    }
+                    .tint(.red)
+                } header: { Text("Onboarding") }
+                footer: { Text("Enable to show onboarding on next app launch. Toggle auto-turns off.") }
+
+                Section {
+                    Button {
+                        showGitHubLink = true
+                    } label: {
+                        HStack {
+                            Label("Source Code", systemImage: "chevron.left.forwardslash.chevron.right")
+                            Spacer()
+                            Image(systemName: "arrow.up.right").font(.caption).foregroundColor(.secondary)
+                        }
+                    }
+                    .foregroundColor(.primary)
+
+                    Button {
+                        showWebsiteLink = true
+                    } label: {
+                        HStack {
+                            Label("Website", systemImage: "globe")
+                            Spacer()
+                            Image(systemName: "arrow.up.right").font(.caption).foregroundColor(.secondary)
+                        }
+                    }
+                    .foregroundColor(.primary)
+
+                    NavigationLink {
+                        AboutView()
+                    } label: {
+                        Label("About", systemImage: "info.circle")
+                    }
+                } header: { Text("Information") }
+
+                Section {
+                    VStack(spacing: 8) {
+                        if let logo = UIImage(named: "HeaderLogo") {
+                            Image(uiImage: logo).resizable().aspectRatio(contentMode: .fit).frame(height: 24).opacity(0.5)
+                        }
+                        Text("Made with love by FadSec Lab, Pakistan")
+                            .font(.footnote).foregroundColor(.secondary)
+                        Text("Licensed under GPLv3")
+                            .font(.caption2).foregroundColor(.secondary).opacity(0.7)
+                    }
+                    .frame(maxWidth: .infinity).padding(.vertical, 12)
+                }
+            }
+            .navigationTitle("Settings")
+            .sheet(isPresented: $showGitHubLink) {
+                LinkPreviewView(url: URL(string: "https://github.com/anonfaded/FadCam-iOS")!, title: "FadCam iOS Source Code")
+            }
+            .sheet(isPresented: $showWebsiteLink) {
+                LinkPreviewView(url: URL(string: "https://fadcam.fadseclab.com")!, title: "FadCam Website")
+            }
+            .alert("Permission Required", isPresented: $showingAlert) {
+                Button("Cancel", role: .cancel) { saveToPhotos = false }
+                Button("Settings") {
+                    if let url = URL(string: UIApplication.openSettingsURLString) { UIApplication.shared.open(url) }
+                }
+            } message: { Text(alertMessage) }
+        }
+    }
+
+    private func requestPhotoPermission() {
+        switch PHPhotoLibrary.authorizationStatus(for: .addOnly) {
+        case .authorized, .limited: break
+        case .notDetermined:
+            Task {
+                if await PHPhotoLibrary.requestAuthorization(for: .addOnly) != .authorized {
+                    await MainActor.run {
+                        saveToPhotos = false; alertMessage = "Photo library access needed."; showingAlert = true
+                    }
+                }
+            }
+        case .denied, .restricted:
+            saveToPhotos = false; alertMessage = "Access denied. Enable in Settings."; showingAlert = true
+        @unknown default: break
+        }
+    }
+}
+
+struct AboutView: View {
+    var body: some View {
+        List {
+            Section {
+                VStack(spacing: 12) {
+                    if let logo = UIImage(named: "HeaderLogo") {
+                        Image(uiImage: logo).resizable().aspectRatio(contentMode: .fit).frame(height: 40)
+                    }
+                    Text("FadCam").font(.title2.bold())
+                    Text("Ad-free. Open source. Dashcam for iOS.")
+                        .font(.subheadline).foregroundColor(.secondary).multilineTextAlignment(.center)
+                    Text("Zero tracking. Zero logs.")
+                        .font(.caption).foregroundColor(.secondary)
+                }
+                .frame(maxWidth: .infinity).padding(.vertical, 8)
+            }
+
+            Section {
+                HStack { Text("Version"); Spacer(); Text(Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String ?? "1.0").foregroundColor(.secondary) }
+                HStack { Text("Build"); Spacer(); Text(Bundle.main.infoDictionary?["CFBundleVersion"] as? String ?? "1").foregroundColor(.secondary) }
+            } header: { Text("App Info") }
+
+            Section {
+                HStack { Text("iOS"); Spacer(); Text(UIDevice.current.systemVersion).foregroundColor(.secondary) }
+                HStack { Text("Device"); Spacer(); Text(UIDevice.current.model).foregroundColor(.secondary) }
+            } header: { Text("System") }
+
+            Section {
+                Link(destination: URL(string: "https://github.com/anonfaded/FadCam-iOS")!) {
+                    HStack { Text("GitHub"); Spacer(); Image(systemName: "arrow.up.right").font(.caption).foregroundColor(.secondary) }
+                }
+                Link(destination: URL(string: "https://fadcam.fadseclab.com")!) {
+                    HStack { Text("Website"); Spacer(); Image(systemName: "arrow.up.right").font(.caption).foregroundColor(.secondary) }
+                }
+            } header: { Text("Links") }
+
+            Section {
+                VStack(spacing: 8) {
+                    Text("Made with love by FadSec Lab, Pakistan")
+                        .font(.footnote).foregroundColor(.secondary)
+                    Text("GNU General Public License v3.0")
+                        .font(.caption2).foregroundColor(.secondary).opacity(0.7)
+                }
+                .frame(maxWidth: .infinity).padding(.vertical, 8)
+            }
+        }
+        .navigationTitle("About").navigationBarTitleDisplayMode(.inline)
+    }
+}
+
+#Preview { SettingsView() }
