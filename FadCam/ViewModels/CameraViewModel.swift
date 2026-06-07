@@ -100,6 +100,11 @@ final class CameraViewModel: ObservableObject {
         withAnimation(.easeInOut(duration: 0.3)) {
             isPreviewActive.toggle()
         }
+        if isPreviewActive {
+            startSession()
+        } else if recordingState != .recording && !isPaused {
+            stopSession()
+        }
     }
 
     func startSession() {
@@ -145,6 +150,23 @@ final class CameraViewModel: ObservableObject {
     func saveToPhotos(url: URL) {
         guard isPhotoPermissionGranted else { return }
         cameraService.saveToPhotos(url: url)
+    }
+
+    func capturePhoto() {
+        guard isPreviewActive, isPermissionGranted else { return }
+        cameraService.capturePhoto { [weak self] result in
+            Task { @MainActor in
+                guard let self else { return }
+                switch result {
+                case .success(let url):
+                    if self.isPhotoPermissionGranted {
+                        self.cameraService.saveToPhotos(url: url)
+                    }
+                case .failure(let error):
+                    self.errorMessage = error.localizedDescription
+                }
+            }
+        }
     }
 
     func startRecording() {

@@ -41,18 +41,10 @@ struct ContentView: View {
     private var batterySaverOverlay: some View {
         VStack {
             Spacer()
-            VStack(spacing: 6) {
-                Image(systemName: "video.fill")
-                    .font(.system(size: 18))
-                    .foregroundColor(.red.opacity(0.4))
-                Text("Recording \(formatTime(cameraVM.elapsedTime))")
-                    .font(.system(.body, design: .monospaced))
-                    .foregroundColor(.white.opacity(0.5))
-                Text("Long press to exit Battery Saver")
-                    .font(.caption2)
-                    .foregroundColor(.white.opacity(0.2))
-            }
-            .padding(.bottom, 60)
+            Text("Long press to disable battery saver mode")
+                .font(.system(.body, design: .monospaced))
+                .foregroundColor(.white.opacity(0.3))
+            Spacer()
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
         .contentShape(Rectangle())

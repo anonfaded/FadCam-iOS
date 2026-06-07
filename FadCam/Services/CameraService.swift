@@ -4,9 +4,11 @@ import Photos
 class CameraService: NSObject {
     let session = AVCaptureSession()
     let movieFileOutput = AVCaptureMovieFileOutput()
+    let photoOutput = AVCapturePhotoOutput()
     private var videoDeviceInput: AVCaptureDeviceInput?
     private var audioDeviceInput: AVCaptureDeviceInput?
     private var recordingCompletion: ((Result<URL, Error>) -> Void)?
+    private var photoCompletion: ((Result<URL, Error>) -> Void)?
     private(set) var currentCamera: AVCaptureDevice.Position = .back
 
     override init() {
@@ -14,6 +16,9 @@ class CameraService: NSObject {
         session.sessionPreset = .high
         if session.canAddOutput(movieFileOutput) {
             session.addOutput(movieFileOutput)
+        }
+        if session.canAddOutput(photoOutput) {
+            session.addOutput(photoOutput)
         }
     }
 
@@ -139,6 +144,12 @@ class CameraService: NSObject {
         movieFileOutput.stopRecording()
     }
 
+    func capturePhoto(completion: @escaping (Result<URL, Error>) -> Void) {
+        photoCompletion = completion
+        let settings = AVCapturePhotoSettings()
+        photoOutput.capturePhoto(with: settings, delegate: self)
+    }
+
     var isRecording: Bool {
         movieFileOutput.isRecording
     }
@@ -154,6 +165,35 @@ extension CameraService: AVCaptureFileOutputRecordingDelegate {
             recordingCompletion?(.success(outputFileURL))
         }
         recordingCompletion = nil
+    }
+}
+
+extension CameraService: AVCapturePhotoCaptureDelegate {
+    func photoOutput(_ output: AVCapturePhotoOutput, didFinishProcessingPhoto photo: AVCapturePhoto, error: Error?) {
+        if let error = error {
+            photoCompletion?(.failure(error))
+            photoCompletion = nil
+            return
+        }
+        guard let data = photo.fileDataRepresentation() else {
+            photoCompletion?(.failure(CameraError.cannotAddInput))
+            photoCompletion = nil
+            return
+        }
+        let documents = FileManager.default.urls(for: .documentDirectory, in: .userDomainMask)[0]
+        let fadcamDir = documents.appendingPathComponent("FadCam", isDirectory: true)
+        try? FileManager.default.createDirectory(at: fadcamDir, withIntermediateDirectories: true)
+        let formatter = DateFormatter()
+        formatter.dateFormat = "yyyyMMdd_HHmmss"
+        let filename = "FadShot_\(formatter.string(from: Date())).jpg"
+        let url = fadcamDir.appendingPathComponent(filename)
+        do {
+            try data.write(to: url)
+            photoCompletion?(.success(url))
+        } catch {
+            photoCompletion?(.failure(error))
+        }
+        photoCompletion = nil
     }
 }
 

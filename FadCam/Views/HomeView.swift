@@ -7,6 +7,7 @@ struct HomeView: View {
     @Environment(\.scenePhase) var scenePhase
     @State private var lastZoomValue: CGFloat = 1.0
     @State private var selectedTopTab: TopTab = .fadCam
+    @State private var showFullscreenPreview = false
 
     enum TopTab: String, CaseIterable, Identifiable {
         case fadCam = "FadCam", fadRec = "FadRec", fadMic = "FadMic"
@@ -64,41 +65,49 @@ struct HomeView: View {
         } message: {
             Text(cameraVM.errorMessage ?? "")
         }
+        .fullScreenCover(isPresented: $showFullscreenPreview) {
+            FullscreenPreviewView(cameraVM: cameraVM)
+        }
     }
 
     // MARK: - Top Bar
 
     private var topBar: some View {
-        HStack {
-            Button { } label: {
-                Image(systemName: "line.horizontal.3")
-                    .font(.system(size: 16, weight: .semibold))
-                    .foregroundColor(.white)
-                    .frame(width: 34, height: 34)
-                    .background(Color.white.opacity(0.08))
-                    .clipShape(Circle())
-            }
-            Spacer()
+        ZStack {
+            // Centered logo - truly centered
             if let logo = UIImage(named: "HeaderLogo") {
                 Image(uiImage: logo)
                     .resizable()
                     .aspectRatio(contentMode: .fit)
-                    .frame(height: 26)
+                    .frame(height: 32)
             } else {
                 Text("FadCam")
-                    .font(.system(size: 18, weight: .bold, design: .rounded))
+                    .font(.system(size: 22, weight: .bold, design: .rounded))
                     .foregroundStyle(LinearGradient(colors: [.red, .orange], startPoint: .leading, endPoint: .trailing))
             }
-            Spacer()
-            Button { } label: {
-                HStack(spacing: 3) {
-                    Image(systemName: "crown.fill").font(.system(size: 10))
-                    Text("Pro").font(.system(size: 12, weight: .bold))
+
+            HStack {
+                // Left: Hamburger menu
+                Button { } label: {
+                    Image(systemName: "line.horizontal.3")
+                        .font(.system(size: 16, weight: .semibold))
+                        .foregroundColor(.white)
+                        .frame(width: 34, height: 34)
+                        .background(Color.white.opacity(0.08))
+                        .clipShape(Circle())
                 }
-                .foregroundColor(.black)
-                .padding(.horizontal, 10).padding(.vertical, 6)
-                .background(LinearGradient(colors: [Color(red: 1.0, green: 0.85, blue: 0.2), Color(red: 1.0, green: 0.7, blue: 0.0)], startPoint: .top, endPoint: .bottom))
-                .clipShape(Capsule())
+                Spacer()
+                // Right: Pro badge
+                Button { } label: {
+                    HStack(spacing: 3) {
+                        Image(systemName: "crown.fill").font(.system(size: 10))
+                        Text("Pro").font(.system(size: 12, weight: .bold))
+                    }
+                    .foregroundColor(.black)
+                    .padding(.horizontal, 10).padding(.vertical, 6)
+                    .background(LinearGradient(colors: [Color(red: 1.0, green: 0.85, blue: 0.2), Color(red: 1.0, green: 0.7, blue: 0.0)], startPoint: .top, endPoint: .bottom))
+                    .clipShape(Capsule())
+                }
             }
         }
         .padding(.horizontal, 14)
@@ -326,8 +335,24 @@ struct HomeView: View {
                                 }
                             }
                             HStack(spacing: 6) {
-                                previewActionButton(icon: "camera.fill", label: "FadShot") { }
-                                previewActionButton(icon: "rectangle.expand.vertical", label: "Full") { }
+                                previewActionButton(
+                                    icon: cameraVM.isBatterySaverActive ? "moon.fill" : "moon",
+                                    label: "Saver"
+                                ) {
+                                    cameraVM.toggleBatterySaver()
+                                }
+                                .opacity(cameraVM.recordingState == .recording ? 1 : 0.4)
+                                .disabled(cameraVM.recordingState != .recording)
+                                previewActionButton(icon: "camera.fill", label: "FadShot") {
+                                    cameraVM.capturePhoto()
+                                }
+                                .opacity(cameraVM.isPreviewActive ? 1 : 0.4)
+                                .disabled(!cameraVM.isPreviewActive)
+                                previewActionButton(icon: "rectangle.expand.vertical", label: "Full") {
+                                    showFullscreenPreview = true
+                                }
+                                .opacity(cameraVM.isPreviewActive ? 1 : 0.4)
+                                .disabled(!cameraVM.isPreviewActive)
                             }
                         }
                     }
@@ -345,8 +370,11 @@ struct HomeView: View {
         .contentShape(Rectangle())
         .onLongPressGesture(minimumDuration: 0.5) {
             UIImpactFeedbackGenerator(style: .medium).impactOccurred()
-            cameraVM.togglePreview()
-            cameraVM.startSession()
+            if cameraVM.recordingState == .recording {
+                cameraVM.toggleBatterySaver()
+            } else {
+                cameraVM.togglePreview()
+            }
         }
     }
 
@@ -362,19 +390,22 @@ struct HomeView: View {
 
             VStack {
                 Spacer()
+                // "Hold to wake up" text above the buttons
                 Text("Hold to wake up the camera")
                     .font(.system(size: 13, weight: .medium))
                     .foregroundColor(.red)
-                    .padding(.bottom, 16)
-            }
+                    .padding(.bottom, 8)
 
-            VStack {
-                Spacer()
+                // FadShot + Full buttons at bottom-right (dimmed when preview off)
                 HStack {
                     Spacer()
                     HStack(spacing: 6) {
                         previewActionButton(icon: "camera.fill", label: "FadShot") { }
+                            .opacity(0.4)
+                            .disabled(true)
                         previewActionButton(icon: "rectangle.expand.vertical", label: "Full") { }
+                            .opacity(0.4)
+                            .disabled(true)
                     }
                 }
                 .padding(.horizontal, 10).padding(.bottom, 8)
@@ -598,6 +629,112 @@ struct HomeView: View {
             cameraVM.isPaused = true
             cameraVM.stopRecording()
         }
+    }
+}
+
+// MARK: - Fullscreen Preview
+
+struct FullscreenPreviewView: View {
+    @ObservedObject var cameraVM: CameraViewModel
+    @Environment(\.dismiss) private var dismiss
+
+    var body: some View {
+        ZStack {
+            Color.black.ignoresSafeArea()
+
+            CameraPreview(session: cameraVM.cameraService.session)
+                .ignoresSafeArea()
+                .scaleEffect(cameraVM.zoomFactor)
+
+            VStack {
+                HStack {
+                    Spacer()
+                    Button {
+                        dismiss()
+                    } label: {
+                        Image(systemName: "xmark.circle.fill")
+                            .font(.system(size: 28))
+                            .foregroundColor(.white.opacity(0.8))
+                            .background(Color.black.opacity(0.3))
+                            .clipShape(Circle())
+                    }
+                    .padding(.trailing, 20)
+                    .padding(.top, 60)
+                }
+                Spacer()
+
+                if cameraVM.recordingState == .recording || cameraVM.isPaused {
+                    VStack {
+                        Spacer()
+                        HStack(spacing: 6) {
+                            if !cameraVM.isPaused {
+                                RecordingDot()
+                            } else {
+                                Circle().fill(.orange).frame(width: 10, height: 10)
+                            }
+                            Text(cameraVM.isPaused ? "PAUSED" : formatTime(cameraVM.elapsedTime))
+                                .font(.system(size: 16, design: .monospaced).weight(.bold))
+                                .foregroundColor(.white)
+                                .padding(.horizontal, 12).padding(.vertical, 6)
+                                .background(Color.black.opacity(0.55))
+                                .clipShape(Capsule())
+                        }
+                        .padding(.bottom, 100)
+                    }
+                }
+
+                HStack(spacing: 20) {
+                    Button {
+                        cameraVM.capturePhoto()
+                    } label: {
+                        Image(systemName: "camera.fill")
+                            .font(.system(size: 22, weight: .medium))
+                            .foregroundColor(.white)
+                            .frame(width: 60, height: 60)
+                            .background(Color.red.opacity(0.8))
+                            .clipShape(Circle())
+                    }
+                    .opacity(cameraVM.isPreviewActive ? 1 : 0.4)
+                    .disabled(!cameraVM.isPreviewActive)
+
+                    Button {
+                        cameraVM.toggleTorch()
+                    } label: {
+                        Image(systemName: cameraVM.isTorchOn ? "bolt.fill" : "bolt.slash.fill")
+                            .font(.system(size: 22))
+                            .foregroundColor(cameraVM.isTorchOn ? .yellow : .white)
+                            .frame(width: 60, height: 60)
+                            .background(Color.white.opacity(0.1))
+                            .clipShape(Circle())
+                    }
+
+                    Button {
+                        cameraVM.switchCamera()
+                    } label: {
+                        Image(systemName: "arrow.triangle.2.circlepath.camera.fill")
+                            .font(.system(size: 22))
+                            .foregroundColor(.white)
+                            .frame(width: 60, height: 60)
+                            .background(Color.white.opacity(0.1))
+                            .clipShape(Circle())
+                    }
+                }
+                .padding(.bottom, 50)
+            }
+        }
+        .gesture(
+            MagnificationGesture()
+                .onChanged { value in
+                    let newZoom = cameraVM.zoomFactor * value
+                    cameraVM.updateZoom(newZoom)
+                }
+        )
+    }
+
+    private func formatTime(_ interval: TimeInterval) -> String {
+        let s = Int(interval)
+        let h = s / 3600, m = (s % 3600) / 60, sec = s % 60
+        return h > 0 ? String(format: "%d:%02d:%02d", h, m, sec) : String(format: "%02d:%02d", m, sec)
     }
 }
 
