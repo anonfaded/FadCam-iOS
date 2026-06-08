@@ -7,7 +7,13 @@ struct HomeView: View {
     @Environment(\.scenePhase) var scenePhase
     @State private var lastZoomValue: CGFloat = 1.0
     @State private var selectedTopTab: TopTab = .fadCam
-    @State private var showFullscreenPreview = false
+
+    // Sleeping avatar animations
+    @State private var breathingOpacity: Double = 0.80
+    @State private var breathingScale: Double = 1.0
+    @State private var z1Float: CGFloat = 0
+    @State private var z2Float: CGFloat = 0
+    @State private var z3Float: CGFloat = 0
 
     enum TopTab: String, CaseIterable, Identifiable {
         case fadCam = "FadCam", fadRec = "FadRec", fadMic = "FadMic"
@@ -66,9 +72,6 @@ struct HomeView: View {
             Button("OK") { cameraVM.errorMessage = nil }
         } message: {
             Text(cameraVM.errorMessage ?? "")
-        }
-        .fullScreenCover(isPresented: $showFullscreenPreview) {
-            FullscreenPreviewView(cameraVM: cameraVM)
         }
     }
 
@@ -293,19 +296,16 @@ struct HomeView: View {
     private var previewArea: some View {
         ZStack {
             if cameraVM.isPreviewActive {
-                CameraPreview(session: cameraVM.cameraService.session)
+                CameraPreview(session: cameraVM.cameraService.session,
+                              isMirrored: cameraVM.currentCamera == .front && !cameraVM.isFrontFlipped)
                     .scaleEffect(cameraVM.zoomFactor)
                 Color.black.opacity(0.001)
 
-                if cameraVM.recordingState == .recording || cameraVM.isPaused {
+                if cameraVM.recordingState == .recording {
                     VStack {
                         HStack(spacing: 6) {
-                            if !cameraVM.isPaused {
-                                RecordingDot()
-                            } else {
-                                Circle().fill(.orange).frame(width: 10, height: 10)
-                            }
-                            Text(cameraVM.isPaused ? "PAUSED" : formatTime(cameraVM.elapsedTime))
+                            RecordingDot()
+                            Text(formatTime(cameraVM.elapsedTime))
                                 .font(.system(size: 12, design: .monospaced).weight(.bold))
                                 .foregroundColor(.white)
                                 .padding(.horizontal, 8).padding(.vertical, 3)
@@ -348,13 +348,8 @@ struct HomeView: View {
                                 previewActionButton(icon: "camera.fill", label: "FadShot") {
                                     cameraVM.capturePhoto()
                                 }
-                                .opacity(cameraVM.isPreviewActive ? 1 : 0.4)
-                                .disabled(!cameraVM.isPreviewActive)
-                                previewActionButton(icon: "rectangle.expand.vertical", label: "Full") {
-                                    showFullscreenPreview = true
-                                }
-                                .opacity(cameraVM.isPreviewActive ? 1 : 0.4)
-                                .disabled(!cameraVM.isPreviewActive)
+                                    .opacity(cameraVM.isPreviewActive ? 1 : 0.4)
+                                    .disabled(!cameraVM.isPreviewActive)
                             }
                         }
                     }
@@ -389,6 +384,10 @@ struct HomeView: View {
                 .position(x: 50, y: 50)
             sparkles
             sleepingMoon
+                .overlay(alignment: .topTrailing) {
+                    zzzBadge
+                        .offset(x: 6, y: -10)
+                }
 
             VStack {
                 Spacer()
@@ -403,9 +402,6 @@ struct HomeView: View {
                     Spacer()
                     HStack(spacing: 6) {
                         previewActionButton(icon: "camera.fill", label: "FadShot") { }
-                            .opacity(0.4)
-                            .disabled(true)
-                        previewActionButton(icon: "rectangle.expand.vertical", label: "Full") { }
                             .opacity(0.4)
                             .disabled(true)
                     }
@@ -456,26 +452,98 @@ struct HomeView: View {
                     .position(x: geo.size.width * 0.15, y: geo.size.height * 0.7)
                 Image(systemName: "sparkle").font(.system(size: 8)).foregroundColor(.white.opacity(0.3))
                     .position(x: geo.size.width * 0.85, y: geo.size.height * 0.75)
-                Image(systemName: "sparkle").font(.system(size: 6)).foregroundColor(.white.opacity(0.4))
-                    .position(x: geo.size.width * 0.6, y: geo.size.height * 0.45)
-                Text("zZ").font(.system(size: 14, weight: .bold, design: .rounded)).foregroundColor(.white.opacity(0.6))
-                    .position(x: geo.size.width * 0.62, y: geo.size.height * 0.32)
             }
         }
     }
 
     private var sleepingMoon: some View {
         ZStack {
+            // Round body with radial gradient matching Android (#c8c8c8 → #2e2e2e)
             Circle()
-                .fill(RadialGradient(gradient: Gradient(colors: [Color(red: 0.5, green: 0.5, blue: 0.55), Color(red: 0.25, green: 0.25, blue: 0.3)]), center: .topLeading, startRadius: 5, endRadius: 100))
+                .fill(RadialGradient(
+                    gradient: Gradient(colors: [
+                        Color(red: 0.784, green: 0.784, blue: 0.784),
+                        Color(red: 0.180, green: 0.180, blue: 0.180)
+                    ]),
+                    center: UnitPoint(x: 0.375, y: 0.25),
+                    startRadius: 10,
+                    endRadius: 75
+                ))
                 .frame(width: 95, height: 95)
                 .shadow(color: .black.opacity(0.5), radius: 10, x: 0, y: 5)
-            HStack(spacing: 18) {
-                Capsule().fill(.black).frame(width: 12, height: 3)
-                Capsule().fill(.black).frame(width: 12, height: 3)
+                .opacity(breathingOpacity)
+                .scaleEffect(breathingScale)
+
+            // Left sleepy eye — semicircle
+            Path { path in
+                path.addArc(
+                    center: CGPoint(x: 11, y: 0),
+                    radius: 11,
+                    startAngle: .degrees(0),
+                    endAngle: .degrees(180),
+                    clockwise: false
+                )
+                path.closeSubpath()
             }
-            .offset(y: -6)
-            Capsule().fill(.black).frame(width: 16, height: 2.5).offset(y: 10)
+            .fill(Color(red: 0.10, green: 0.10, blue: 0.10))
+            .frame(width: 22, height: 11)
+            .offset(x: -19, y: 2)
+
+            // Right sleepy eye — semicircle
+            Path { path in
+                path.addArc(
+                    center: CGPoint(x: 11, y: 0),
+                    radius: 11,
+                    startAngle: .degrees(0),
+                    endAngle: .degrees(180),
+                    clockwise: false
+                )
+                path.closeSubpath()
+            }
+            .fill(Color(red: 0.10, green: 0.10, blue: 0.10))
+            .frame(width: 22, height: 11)
+            .offset(x: 19, y: 2)
+        }
+        .onAppear {
+            startBreathingAnimation()
+            startFloatingZAnimations()
+        }
+    }
+
+    // zZz floating text — positioned at top-right of avatar, separate from the head
+    private var zzzBadge: some View {
+        HStack(alignment: .bottom, spacing: 1) {
+            Text("z")
+                .font(.system(size: 8, weight: .black, design: .default))
+                .foregroundColor(Color(red: 0.66, green: 0.85, blue: 0.94))
+                .offset(y: z1Float)
+            Text("Z")
+                .font(.system(size: 11, weight: .black, design: .default))
+                .foregroundColor(Color(red: 0.81, green: 0.93, blue: 0.97))
+                .offset(y: z2Float)
+            Text("Z")
+                .font(.system(size: 14, weight: .black, design: .default))
+                .foregroundColor(.white)
+                .offset(y: z3Float)
+        }
+    }
+
+    private func startBreathingAnimation() {
+        withAnimation(Animation.easeInOut(duration: 2.8).repeatForever(autoreverses: true)) {
+            breathingOpacity = 0.55
+            breathingScale = 0.94
+        }
+    }
+
+    private func startFloatingZAnimations() {
+        withAnimation(Animation.easeInOut(duration: 1.6).repeatForever(autoreverses: true)) {
+            z1Float = -4
+        }
+        withAnimation(Animation.easeInOut(duration: 1.9).repeatForever(autoreverses: true)) {
+            z2Float = -5
+        }
+        withAnimation(Animation.easeInOut(duration: 2.2).repeatForever(autoreverses: true)) {
+            z3Float = -6
         }
     }
 
@@ -492,7 +560,7 @@ struct HomeView: View {
         }
     }
 
-    // MARK: - Action Bar (Torch | Start/Stop | Pause/Resume)
+    // MARK: - Action Bar (Torch | Start/Stop | Switch | Flip)
 
     private var actionBar: some View {
         HStack(spacing: 12) {
@@ -516,7 +584,6 @@ struct HomeView: View {
                     cameraVM.startRecording()
                 case .recording:
                     cameraVM.stopRecording()
-                    cameraVM.isPaused = false
                 case .error:
                     cameraVM.recordingState = .ready
                 }
@@ -546,26 +613,29 @@ struct HomeView: View {
 
             Button {
                 UIImpactFeedbackGenerator(style: .medium).impactOccurred()
-                togglePauseResume()
+                cameraVM.switchCamera()
             } label: {
-                Image(systemName: cameraVM.isPaused ? "play.fill" : "pause.fill")
+                Image(systemName: "arrow.triangle.2.circlepath.camera.fill")
                     .font(.system(size: 16))
                     .foregroundColor(.white)
                     .frame(width: 50, height: 50)
-                    .background(
-                        LinearGradient(
-                            colors: cameraVM.recordingState == .recording
-                                ? (cameraVM.isPaused
-                                    ? [Color(red: 0.3, green: 0.7, blue: 0.35), Color(red: 0.2, green: 0.55, blue: 0.25)]
-                                    : [Color(red: 0.85, green: 0.55, blue: 0.15), Color(red: 0.7, green: 0.4, blue: 0.1)])
-                                : [Color.white.opacity(0.08), Color.white.opacity(0.08)],
-                            startPoint: .top, endPoint: .bottom
-                        )
-                    )
+                    .background(Color.white.opacity(0.08))
                     .clipShape(Circle())
             }
-            .opacity(cameraVM.recordingState == .recording || cameraVM.isPaused ? 1 : 0.4)
-            .disabled(cameraVM.recordingState != .recording && !cameraVM.isPaused)
+
+            if cameraVM.currentCamera == .front {
+                Button {
+                    UIImpactFeedbackGenerator(style: .light).impactOccurred()
+                    cameraVM.toggleFlip()
+                } label: {
+                    Image(systemName: cameraVM.isFrontFlipped ? "arrow.left.and.right.righttriangle.left.righttriangle.right.fill" : "arrow.left.and.right.righttriangle.left.righttriangle.right")
+                        .font(.system(size: 16))
+                        .foregroundColor(.white)
+                        .frame(width: 50, height: 50)
+                        .background(Color.white.opacity(0.08))
+                        .clipShape(Circle())
+                }
+            }
         }
         .padding(.horizontal, 14)
     }
@@ -623,230 +693,6 @@ struct HomeView: View {
         return f.string(from: date)
     }
 
-    private func togglePauseResume() {
-        if cameraVM.isPaused {
-            cameraVM.resumeRecording()
-        } else if cameraVM.recordingState == .recording {
-            cameraVM.pauseRecording()
-        }
-    }
-}
-
-// MARK: - Fullscreen Preview
-
-struct FullscreenPreviewView: View {
-    @ObservedObject var cameraVM: CameraViewModel
-    @Environment(\.dismiss) private var dismiss
-    @State private var lastZoomValue: CGFloat = 1.0
-
-    var body: some View {
-        ZStack {
-            Color.black.ignoresSafeArea()
-
-            CameraPreview(session: cameraVM.cameraService.session)
-                .ignoresSafeArea()
-                .scaleEffect(cameraVM.zoomFactor)
-
-            VStack(spacing: 0) {
-                // Top bar
-                HStack {
-                    Spacer()
-                    Button {
-                        dismiss()
-                    } label: {
-                        Image(systemName: "xmark.circle.fill")
-                            .font(.system(size: 30))
-                            .foregroundColor(.white)
-                            .background(Color.black.opacity(0.4))
-                            .clipShape(Circle())
-                    }
-                }
-                .padding(.horizontal, 20)
-                .padding(.top, 50)
-
-                if cameraVM.recordingState == .recording || cameraVM.isPaused {
-                    HStack(spacing: 6) {
-                        if !cameraVM.isPaused {
-                            RecordingDot()
-                        } else {
-                            Circle().fill(.orange).frame(width: 10, height: 10)
-                        }
-                        Text(cameraVM.isPaused ? "PAUSED" : formatTime(cameraVM.elapsedTime))
-                            .font(.system(size: 16, design: .monospaced).weight(.bold))
-                            .foregroundColor(.white)
-                            .padding(.horizontal, 12).padding(.vertical, 6)
-                            .background(Color.black.opacity(0.55))
-                            .clipShape(Capsule())
-                    }
-                    .padding(.top, 16)
-                }
-
-                Spacer()
-
-                // Photo controls row (FadShot)
-                HStack(spacing: 0) {
-                    // Torch
-                    Button {
-                        cameraVM.toggleTorch()
-                    } label: {
-                        VStack(spacing: 4) {
-                            Image(systemName: cameraVM.isTorchOn ? "bolt.fill" : "bolt.slash.fill")
-                                .font(.system(size: 20))
-                            Text("Torch").font(.system(size: 10))
-                        }
-                        .foregroundColor(cameraVM.isTorchOn ? .yellow : .white)
-                        .frame(maxWidth: .infinity)
-                    }
-
-                    // Flip
-                    Button {
-                        cameraVM.switchCamera()
-                    } label: {
-                        VStack(spacing: 4) {
-                            Image(systemName: "arrow.triangle.2.circlepath.camera.fill")
-                                .font(.system(size: 20))
-                            Text("Flip").font(.system(size: 10))
-                        }
-                        .foregroundColor(.white)
-                        .frame(maxWidth: .infinity)
-                    }
-
-                    // FadShot
-                    Button {
-                        cameraVM.capturePhoto()
-                    } label: {
-                        VStack(spacing: 4) {
-                            ZStack {
-                                Circle().stroke(Color.white, lineWidth: 3).frame(width: 50, height: 50)
-                                Image(systemName: "camera.fill")
-                                    .font(.system(size: 18))
-                                    .foregroundColor(.white)
-                            }
-                            Text("FadShot").font(.system(size: 10))
-                        }
-                        .foregroundColor(.white)
-                        .frame(maxWidth: .infinity)
-                    }
-                    .opacity(cameraVM.isPreviewActive ? 1 : 0.4)
-                    .disabled(!cameraVM.isPreviewActive)
-
-                    // Saver (during recording)
-                    Button {
-                        if cameraVM.recordingState == .recording {
-                            cameraVM.toggleBatterySaver()
-                        }
-                    } label: {
-                        VStack(spacing: 4) {
-                            Image(systemName: cameraVM.isBatterySaverActive ? "moon.fill" : "moon")
-                                .font(.system(size: 20))
-                            Text("Saver").font(.system(size: 10))
-                        }
-                        .foregroundColor(cameraVM.isBatterySaverActive ? .red : .white)
-                        .frame(maxWidth: .infinity)
-                    }
-                    .opacity(cameraVM.recordingState == .recording ? 1 : 0.4)
-                    .disabled(cameraVM.recordingState != .recording)
-                }
-                .padding(.horizontal, 20)
-                .padding(.vertical, 12)
-                .background(Color.black.opacity(0.3))
-
-                // Video controls row
-                HStack(spacing: 16) {
-                    // Pause/Resume
-                    Button {
-                        UIImpactFeedbackGenerator(style: .medium).impactOccurred()
-                        togglePauseResume()
-                    } label: {
-                        Image(systemName: cameraVM.isPaused ? "play.fill" : "pause.fill")
-                            .font(.system(size: 18))
-                            .foregroundColor(.white)
-                            .frame(width: 50, height: 50)
-                            .background(
-                                LinearGradient(
-                                    colors: cameraVM.recordingState == .recording
-                                        ? (cameraVM.isPaused
-                                            ? [Color(red: 0.3, green: 0.7, blue: 0.35), Color(red: 0.2, green: 0.55, blue: 0.25)]
-                                            : [Color(red: 0.85, green: 0.55, blue: 0.15), Color(red: 0.7, green: 0.4, blue: 0.1)])
-                                        : [Color.white.opacity(0.1), Color.white.opacity(0.1)],
-                                    startPoint: .top, endPoint: .bottom
-                                )
-                            )
-                            .clipShape(Circle())
-                    }
-                    .opacity(cameraVM.recordingState == .recording || cameraVM.isPaused ? 1 : 0.4)
-                    .disabled(cameraVM.recordingState != .recording && !cameraVM.isPaused)
-
-                    // Record/Stop (big button)
-                    Button {
-                        UIImpactFeedbackGenerator(style: .heavy).impactOccurred()
-                        switch cameraVM.recordingState {
-                        case .ready:
-                            cameraVM.startRecording()
-                        case .recording:
-                            cameraVM.stopRecording()
-                        case .error:
-                            cameraVM.recordingState = .ready
-                        }
-                    } label: {
-                        ZStack {
-                            Circle().stroke(Color.white, lineWidth: 4).frame(width: 70, height: 70)
-                            if cameraVM.recordingState == .recording {
-                                RoundedRectangle(cornerRadius: 6).fill(Color.red).frame(width: 28, height: 28)
-                            } else {
-                                Circle().fill(Color.red).frame(width: 54, height: 54)
-                            }
-                        }
-                    }
-                    .disabled(!cameraVM.isPreviewActive)
-
-                    // Zoom reset (if zoomed)
-                    if cameraVM.zoomFactor > 1.1 {
-                        Button {
-                            cameraVM.updateZoom(1.0)
-                            lastZoomValue = 1.0
-                        } label: {
-                            Text("\(String(format: "%.1f", cameraVM.zoomFactor))x")
-                                .font(.system(size: 14, design: .monospaced).weight(.bold))
-                                .foregroundColor(.white)
-                                .frame(width: 50, height: 50)
-                                .background(Color.red.opacity(0.8))
-                                .clipShape(Circle())
-                        }
-                    } else {
-                        Color.clear.frame(width: 50, height: 50)
-                    }
-                }
-                .padding(.horizontal, 20)
-                .padding(.vertical, 16)
-                .background(Color.black.opacity(0.4))
-            }
-        }
-        .gesture(
-            MagnificationGesture()
-                .onChanged { value in
-                    let newZoom = lastZoomValue * value
-                    cameraVM.updateZoom(newZoom)
-                }
-                .onEnded { _ in
-                    lastZoomValue = cameraVM.zoomFactor
-                }
-        )
-    }
-
-    private func formatTime(_ interval: TimeInterval) -> String {
-        let s = Int(interval)
-        let h = s / 3600, m = (s % 3600) / 60, sec = s % 60
-        return h > 0 ? String(format: "%d:%02d:%02d", h, m, sec) : String(format: "%02d:%02d", m, sec)
-    }
-
-    private func togglePauseResume() {
-        if cameraVM.isPaused {
-            cameraVM.resumeRecording()
-        } else if cameraVM.recordingState == .recording {
-            cameraVM.pauseRecording()
-        }
-    }
 }
 
 // MARK: - Shared Subviews

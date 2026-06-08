@@ -1,5 +1,8 @@
 import AVFoundation
 import Foundation
+import OSLog
+
+private let log = Logger(subsystem: "com.fadseclab.fadcam", category: "recorder")
 
 final class VideoRecorder: @unchecked Sendable {
     enum RecorderError: Error {
@@ -13,30 +16,20 @@ final class VideoRecorder: @unchecked Sendable {
     private var videoInput: AVAssetWriterInput?
     private var audioInput: AVAssetWriterInput?
     private var sessionStarted = false
-    private var isPaused = false
     private var hasStartedSession = false
     private var outputURL: URL?
     private let writeQueue = DispatchQueue(label: "com.fadcam.videorecorder.write", qos: .userInitiated)
 
     var isRecording: Bool { hasStartedSession }
-    var isPausedState: Bool { isPaused }
 
-    func start(to url: URL) throws {
+    func start(to url: URL, cameraPosition: AVCaptureDevice.Position = .back) throws {
         try writeQueue.sync {
             if hasStartedSession { throw RecorderError.alreadyRecording }
-            try startWriterSync(url: url)
+            try startWriterSync(url: url, cameraPosition: cameraPosition)
             hasStartedSession = true
-            isPaused = false
             sessionStarted = false
+            log.info("Recording started to \(url.lastPathComponent)")
         }
-    }
-
-    func pause() {
-        writeQueue.async { [weak self] in self?.isPaused = true }
-    }
-
-    func resume() {
-        writeQueue.async { [weak self] in self?.isPaused = false }
     }
 
     func stop(completion: @escaping (Result<URL, Error>) -> Void) {
@@ -50,7 +43,6 @@ final class VideoRecorder: @unchecked Sendable {
             self.audioInput?.markAsFinished()
             let url = self.outputURL
             self.hasStartedSession = false
-            self.isPaused = false
             writer.finishWriting { [weak self] in
                 guard let self else { return }
                 let finalURL = url
@@ -62,8 +54,10 @@ final class VideoRecorder: @unchecked Sendable {
                     self.audioInput = nil
                     self.sessionStarted = false
                     if finalStatus == .completed, let finalURL {
+                        log.info("Recording stopped successfully: \(finalURL.lastPathComponent)")
                         completion(.success(finalURL))
                     } else {
+                        log.error("Recording stop failed — status: \(String(describing: finalStatus)), error: \(String(describing: finalError))")
                         completion(.failure(finalError ?? RecorderError.writerNotStarted))
                     }
                 }
@@ -75,7 +69,7 @@ final class VideoRecorder: @unchecked Sendable {
         let pts = CMSampleBufferGetPresentationTimeStamp(sampleBuffer)
         let workItem = DispatchWorkItem { [weak self] in
             guard let self else { return }
-            guard self.hasStartedSession, !self.isPaused,
+            guard self.hasStartedSession,
                   let writer = self.assetWriter,
                   let input = self.videoInput,
                   writer.status == .writing,
@@ -94,7 +88,7 @@ final class VideoRecorder: @unchecked Sendable {
     func appendAudio(_ sampleBuffer: CMSampleBuffer) {
         let workItem = DispatchWorkItem { [weak self] in
             guard let self else { return }
-            guard self.hasStartedSession, !self.isPaused, self.sessionStarted,
+            guard self.hasStartedSession, self.sessionStarted,
                   let writer = self.assetWriter,
                   let input = self.audioInput,
                   writer.status == .writing,
@@ -104,7 +98,7 @@ final class VideoRecorder: @unchecked Sendable {
         writeQueue.async(execute: workItem)
     }
 
-    private func startWriterSync(url: URL) throws {
+    private func startWriterSync(url: URL, cameraPosition: AVCaptureDevice.Position) throws {
         outputURL = url
         try? FileManager.default.removeItem(at: url)
         let writer: AVAssetWriter
@@ -117,6 +111,12 @@ final class VideoRecorder: @unchecked Sendable {
         ]
         let vInput = AVAssetWriterInput(mediaType: .video, outputSettings: videoSettings)
         vInput.expectsMediaDataInRealTime = true
+        let rotationAngle: CGFloat = cameraPosition == .front ? -.pi / 2 : .pi / 2
+        var t = CGAffineTransform(rotationAngle: rotationAngle)
+        if cameraPosition == .front {
+            t = CGAffineTransform(scaleX: -1, y: 1).rotated(by: rotationAngle)
+        }
+        vInput.transform = t
         let audioSettings: [String: Any] = [
             AVFormatIDKey: kAudioFormatMPEG4AAC,
             AVNumberOfChannelsKey: 1,

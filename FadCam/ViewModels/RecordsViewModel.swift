@@ -88,11 +88,11 @@ final class RecordsViewModel: ObservableObject {
                 guard FileManager.default.fileExists(atPath: videoDir.path) else { continue }
                 let files = try FileManager.default.contentsOfDirectory(
                     at: videoDir,
-                    includingPropertiesForKeys: [.contentModificationDateKey, .fileSizeKey]
+                    includingPropertiesForKeys: [.creationDateKey, .fileSizeKey]
                 )
                 for fileURL in files where videoExtensions.contains(fileURL.pathExtension.lowercased()) {
-                    let resourceValues = try? fileURL.resourceValues(forKeys: [.contentModificationDateKey, .fileSizeKey])
-                    let date = resourceValues?.contentModificationDate ?? Date()
+                    let resourceValues = try? fileURL.resourceValues(forKeys: [.creationDateKey, .fileSizeKey])
+                    let date = resourceValues?.creationDate ?? Date()
                     let fileSize = Int64(resourceValues?.fileSize ?? 0)
                     totalSize += fileSize
                     let asset = AVAsset(url: fileURL)
@@ -108,11 +108,11 @@ final class RecordsViewModel: ObservableObject {
             // Also scan legacy top-level FadCam directory for old videos
             let legacyFiles = try FileManager.default.contentsOfDirectory(
                 at: recordingsDirectory,
-                includingPropertiesForKeys: [.contentModificationDateKey, .fileSizeKey]
+                includingPropertiesForKeys: [.creationDateKey, .fileSizeKey]
             )
             for fileURL in legacyFiles where videoExtensions.contains(fileURL.pathExtension.lowercased()) {
-                let resourceValues = try? fileURL.resourceValues(forKeys: [.contentModificationDateKey, .fileSizeKey])
-                let date = resourceValues?.contentModificationDate ?? Date()
+                let resourceValues = try? fileURL.resourceValues(forKeys: [.creationDateKey, .fileSizeKey])
+                let date = resourceValues?.creationDate ?? Date()
                 let fileSize = Int64(resourceValues?.fileSize ?? 0)
                 totalSize += fileSize
                 let asset = AVAsset(url: fileURL)
@@ -135,11 +135,11 @@ final class RecordsViewModel: ObservableObject {
                     guard res?.isDirectory == true else { continue }
                     let photoFiles = try FileManager.default.contentsOfDirectory(
                         at: subdir,
-                        includingPropertiesForKeys: [.contentModificationDateKey, .fileSizeKey]
+                        includingPropertiesForKeys: [.creationDateKey, .fileSizeKey]
                     )
                     for fileURL in photoFiles where photoExtensions.contains(fileURL.pathExtension.lowercased()) {
-                        let resourceValues = try? fileURL.resourceValues(forKeys: [.contentModificationDateKey, .fileSizeKey])
-                        let date = resourceValues?.contentModificationDate ?? Date()
+                        let resourceValues = try? fileURL.resourceValues(forKeys: [.creationDateKey, .fileSizeKey])
+                        let date = resourceValues?.creationDate ?? Date()
                         let fileSize = Int64(resourceValues?.fileSize ?? 0)
                         totalSize += fileSize
                         results.append(Recording(

@@ -6,6 +6,9 @@
 //
 
 import SwiftUI
+import OSLog
+
+private let log = Logger(subsystem: "com.fadseclab.fadcam", category: "app")
 
 @main
 struct FadCamApp: App {
@@ -13,14 +16,17 @@ struct FadCamApp: App {
     @State private var showSplash = true
 
     init() {
+        log.info("App init started")
         let completed = UserDefaults.standard.bool(forKey: "hasCompletedOnboarding")
         _showOnboarding = State(initialValue: !completed)
+        log.info("App init done — onboarding: \(!completed)")
     }
 
     var body: some Scene {
         WindowGroup {
             if showSplash {
                 SplashView {
+                    log.info("Splash finished, transitioning")
                     showSplash = false
                 }
             } else if showOnboarding {
@@ -28,6 +34,7 @@ struct FadCamApp: App {
                     UserDefaults.standard.set(true, forKey: "hasCompletedOnboarding")
                     UserDefaults.standard.set(false, forKey: "resumeOnboarding")
                     showOnboarding = false
+                    log.info("Onboarding completed")
                 }
                 .preferredColorScheme(.dark)
             } else {
@@ -53,6 +60,7 @@ struct SplashView: View {
             }
         }
         .onAppear {
+            log.info("SplashView appeared")
             DispatchQueue.main.asyncAfter(deadline: .now() + 2.0) {
                 withAnimation(.easeInOut(duration: 0.4)) {
                     onFinish()

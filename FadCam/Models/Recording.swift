@@ -55,8 +55,12 @@ struct Recording: Identifiable, Hashable {
 
     var cameraPosition: String {
         let path = url.path
+        if path.contains("/FadCam/Back/") { return "Back" }
+        if path.contains("/FadCam/Front/") { return "Front" }
         if path.contains("/FadShot/Back/") { return "Back" }
         if path.contains("/FadShot/Front/") { return "Front" }
+        if path.contains("/Back/") { return "Back" }
+        if path.contains("/Front/") { return "Front" }
         return "Back"
     }
 }

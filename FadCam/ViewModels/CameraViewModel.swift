@@ -2,11 +2,13 @@ import SwiftUI
 import AVFoundation
 import Combine
 import Photos
+import OSLog
+
+private let log = Logger(subsystem: "com.fadseclab.fadcam", category: "camera")
 
 @MainActor
 final class CameraViewModel: NSObject, ObservableObject {
     @Published var recordingState: RecordingState = .ready
-    @Published var isPaused = false
     @Published var isPermissionGranted = false
     @Published var isAudioPermissionGranted = false
     @Published var isPhotoPermissionGranted = false
@@ -14,6 +16,7 @@ final class CameraViewModel: NSObject, ObservableObject {
     @Published var isPreviewActive = false
     @Published var isBatterySaverActive = false
     @Published var currentCamera: AVCaptureDevice.Position = .back
+    @Published var isFrontFlipped = false
     @Published var isTorchOn = false
     @Published var zoomFactor: CGFloat = 1.0
     @Published var isCameraReady = false
@@ -22,10 +25,9 @@ final class CameraViewModel: NSObject, ObservableObject {
 
     let cameraService = CameraService()
     private var recordingStartTime: Date?
-    private var totalPausedDuration: TimeInterval = 0
-    private var lastPauseTime: Date?
     private var timerCancellable: AnyCancellable?
     private var storageRefreshTimer: AnyCancellable?
+    private var previewAutoStarted = false
 
     var recordingURL: URL {
         let documents = FileManager.default.urls(for: .documentDirectory, in: .userDomainMask)[0]
@@ -158,7 +160,7 @@ final class CameraViewModel: NSObject, ObservableObject {
         }
         if isPreviewActive {
             startSession()
-        } else if recordingState != .recording && !isPaused {
+        } else if recordingState != .recording {
             stopSession()
         }
     }
@@ -182,9 +184,15 @@ final class CameraViewModel: NSObject, ObservableObject {
         do {
             try cameraService.switchCamera()
             withAnimation { currentCamera = cameraService.currentCamera }
+            isFrontFlipped = false
         } catch {
             errorMessage = error.localizedDescription
         }
+    }
+
+    func toggleFlip() {
+        isFrontFlipped.toggle()
+        cameraService.setVideoMirrored(isFrontFlipped ? false : true)
     }
 
     func toggleTorch() {
@@ -230,6 +238,7 @@ final class CameraViewModel: NSObject, ObservableObject {
     func startRecording() {
         guard recordingState == .ready else { return }
         if !isPreviewActive {
+            previewAutoStarted = true
             isPreviewActive = true
             startSession()
             DispatchQueue.main.asyncAfter(deadline: .now() + 0.4) { [weak self] in
@@ -237,6 +246,7 @@ final class CameraViewModel: NSObject, ObservableObject {
             }
             return
         }
+        previewAutoStarted = false
         beginRecording()
     }
 
@@ -244,46 +254,24 @@ final class CameraViewModel: NSObject, ObservableObject {
         let url = recordingURL
         try? FileManager.default.createDirectory(at: url.deletingLastPathComponent(), withIntermediateDirectories: true)
         do {
-            try cameraService.recorder.start(to: url)
+            try cameraService.recorder.start(to: url, cameraPosition: currentCamera)
         } catch {
+            log.error("Failed to start recorder: \(error.localizedDescription)")
             errorMessage = "Failed to start recorder: \(error.localizedDescription)"
             return
         }
         recordingState = .recording
-        isPaused = false
         if recordingStartTime == nil {
             recordingStartTime = Date()
         }
-        totalPausedDuration = 0
-        lastPauseTime = nil
         elapsedTime = 0
         startTimer()
-    }
-
-    func pauseRecording() {
-        guard recordingState == .recording, !isPaused else { return }
-        isPaused = true
-        lastPauseTime = Date()
-        cameraService.recorder.pause()
-        stopTimer()
-    }
-
-    func resumeRecording() {
-        guard recordingState == .recording, isPaused else { return }
-        if let lastPause = lastPauseTime {
-            totalPausedDuration += Date().timeIntervalSince(lastPause)
-        }
-        lastPauseTime = nil
-        isPaused = false
-        cameraService.recorder.resume()
-        startTimer()
+        log.info("beginRecording — url: \(url.lastPathComponent)")
     }
 
     func stopRecording() {
         guard recordingState == .recording else { return }
-        isPaused = false
-        lastPauseTime = nil
-        totalPausedDuration = 0
+        log.info("Stopping recording...")
         recordingStartTime = nil
         stopTimer()
         isBatterySaverActive = false
@@ -295,12 +283,18 @@ final class CameraViewModel: NSObject, ObservableObject {
                 case .success(let savedURL):
                     self.recordingState = .ready
                     self.elapsedTime = 0
+                    if self.previewAutoStarted {
+                        self.isPreviewActive = false
+                        self.stopSession()
+                        self.previewAutoStarted = false
+                    }
                     if self.isPhotoPermissionGranted {
                         self.cameraService.saveToPhotos(url: savedURL)
                     }
                     self.refreshStorage()
                     NotificationCenter.default.post(name: .fadCamMediaChanged, object: nil)
                 case .failure(let error):
+                    log.error("Stop failed: \(error.localizedDescription)")
                     self.recordingState = .error(error.localizedDescription)
                     self.errorMessage = error.localizedDescription
                 }
@@ -312,8 +306,7 @@ final class CameraViewModel: NSObject, ObservableObject {
         timerCancellable?.cancel()
         timerCancellable = Timer.publish(every: 0.1, on: .main, in: .common).autoconnect().sink { [weak self] _ in
             guard let self, let start = self.recordingStartTime else { return }
-            let total = Date().timeIntervalSince(start) - self.totalPausedDuration
-            self.elapsedTime = max(0, total)
+            self.elapsedTime = max(0, Date().timeIntervalSince(start))
         }
     }
 

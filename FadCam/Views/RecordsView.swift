@@ -99,7 +99,6 @@ struct RecordsView: View {
             .navigationTitle(isSelectionMode ? selectionTitle : "Recordings")
             .navigationBarTitleDisplayMode(isSelectionMode ? .inline : .large)
             .toolbar { toolbarContent }
-            .refreshable { viewModel.loadRecordings() }
             .onAppear {
                 sortOption = SortOption(rawValue: storedSort) ?? .newest
                 viewMode = ViewMode(rawValue: storedView) ?? .grid
@@ -523,8 +522,7 @@ struct RecordsView: View {
     private var contentView: some View {
         ScrollViewReader { proxy in
             ScrollView {
-                LazyVStack(alignment: .leading, spacing: 18) {
-                    statsHeader.padding(.top, 4)
+                LazyVStack(alignment: .leading, spacing: 18) {                    statsHeader.padding(.top, 4)
                     filterAndToolsRow
                     if selectedFilter != .all { subFilterRow }
 
@@ -541,6 +539,7 @@ struct RecordsView: View {
                 })
             }
             .coordinateSpace(name: "records-scroll")
+            .refreshable { viewModel.loadRecordings() }
             .onPreferenceChange(ScrollOffsetKey.self) { offset in
                 withAnimation(.easeInOut(duration: 0.2)) { scrolledToTop = offset > -100 }
             }
@@ -1100,8 +1099,11 @@ struct RecordingCard: View {
     }
 
     private func relativeDate() -> String {
-        let hours = Int(Date().timeIntervalSince(recording.date) / 3600)
-        if hours < 1 { return "Just now" }
+        let seconds = Int(Date().timeIntervalSince(recording.date))
+        if seconds < 60 { return "Just now" }
+        let minutes = seconds / 60
+        if minutes < 60 { return "\(minutes)m ago" }
+        let hours = minutes / 60
         if hours < 24 { return "\(hours)h ago" }
         let days = hours / 24
         if days < 7 { return "\(days)d ago" }
@@ -1244,8 +1246,11 @@ struct RecordingListRow: View {
     }
 
     private func relativeDate() -> String {
-        let hours = Int(Date().timeIntervalSince(recording.date) / 3600)
-        if hours < 1 { return "Just now" }
+        let seconds = Int(Date().timeIntervalSince(recording.date))
+        if seconds < 60 { return "Just now" }
+        let minutes = seconds / 60
+        if minutes < 60 { return "\(minutes)m ago" }
+        let hours = minutes / 60
         if hours < 24 { return "\(hours)h ago" }
         let days = hours / 24
         if days < 7 { return "\(days)d ago" }

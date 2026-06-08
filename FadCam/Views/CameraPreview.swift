@@ -14,13 +14,18 @@ class PreviewView: UIView {
 
 struct CameraPreview: UIViewRepresentable {
     let session: AVCaptureSession
+    var isMirrored: Bool = false
 
     func makeUIView(context: Context) -> PreviewView {
         let view = PreviewView()
         view.videoPreviewLayer.session = session
         view.videoPreviewLayer.videoGravity = .resizeAspectFill
+        view.videoPreviewLayer.connection?.automaticallyAdjustsVideoMirroring = false
+        view.videoPreviewLayer.connection?.isVideoMirrored = isMirrored
         return view
     }
 
-    func updateUIView(_ uiView: PreviewView, context: Context) {}
+    func updateUIView(_ uiView: PreviewView, context: Context) {
+        uiView.videoPreviewLayer.connection?.isVideoMirrored = isMirrored
+    }
 }

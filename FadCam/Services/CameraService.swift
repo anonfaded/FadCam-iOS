@@ -1,5 +1,8 @@
 import AVFoundation
 import Photos
+import OSLog
+
+private let log = Logger(subsystem: "com.fadseclab.fadcam", category: "camera")
 
 protocol CameraServiceSampleDelegate: AnyObject {
     func cameraService(_ service: CameraService, didOutputVideo sampleBuffer: CMSampleBuffer)
@@ -29,6 +32,7 @@ class CameraService: NSObject {
     }
 
     func setupCamera(position: AVCaptureDevice.Position = .back) throws {
+        log.info("Setting up camera — position: \(position == .back ? "back" : "front")")
         session.beginConfiguration()
         defer { session.commitConfiguration() }
 
@@ -138,6 +142,12 @@ class CameraService: NSObject {
     }
 
     var currentZoom: CGFloat { videoDeviceInput?.device.videoZoomFactor ?? 1.0 }
+
+    func setVideoMirrored(_ mirrored: Bool) {
+        guard let conn = videoDataOutput?.connections.first else { return }
+        conn.automaticallyAdjustsVideoMirroring = false
+        conn.isVideoMirrored = mirrored
+    }
 
     func capturePhoto(completion: @escaping (Result<URL, Error>) -> Void) {
         photoCompletion = completion
