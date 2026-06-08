@@ -6,7 +6,6 @@ struct OnboardingView: View {
     let onComplete: () -> Void
 
     @State private var currentPage = 0
-    @State private var direction = 1
     @State private var cameraGranted = false
     @State private var micGranted = false
     @State private var photoGranted = false
@@ -14,24 +13,20 @@ struct OnboardingView: View {
     private let totalPages = 3
 
     var body: some View {
-        ZStack {
-            Color.black.ignoresSafeArea()
-
-            VStack(spacing: 0) {
-                currentPageView
-                    .transition(.asymmetric(
-                        insertion: .move(edge: direction > 0 ? .trailing : .leading).combined(with: .opacity),
-                        removal: .move(edge: direction > 0 ? .leading : .trailing).combined(with: .opacity)
-                    ))
-                    .animation(.easeInOut(duration: 0.35), value: currentPage)
-                    .id(currentPage)
-
-                Spacer()
-
-                pageIndicator
-                    .padding(.bottom, 16)
+        VStack(spacing: 0) {
+            switch currentPage {
+            case 0: welcomePage
+            case 1: permissionsPage
+            case 2: donePage
+            default: EmptyView()
             }
+
+            Spacer()
+
+            pageIndicator
+                .padding(.bottom, 16)
         }
+        .background(Color.black.ignoresSafeArea())
         .statusBar(hidden: true)
         .preferredColorScheme(.dark)
         .onAppear {
@@ -43,17 +38,6 @@ struct OnboardingView: View {
     }
 
     // MARK: - Navigation
-
-    private var currentPageView: some View {
-        Group {
-            switch currentPage {
-            case 0: welcomePage
-            case 1: permissionsPage
-            case 2: donePage
-            default: EmptyView()
-            }
-        }
-    }
 
     private var pageIndicator: some View {
         HStack(spacing: 6) {
@@ -67,16 +51,14 @@ struct OnboardingView: View {
     }
 
     private func goNext() {
-        direction = 1
         withAnimation { currentPage = min(currentPage + 1, totalPages - 1) }
     }
 
     private func goBack() {
-        direction = -1
         withAnimation { currentPage = max(currentPage - 1, 0) }
     }
 
-    // MARK: - Welcome
+    // MARK: - Pages
 
     private var welcomePage: some View {
         VStack(spacing: 28) {
@@ -112,20 +94,19 @@ struct OnboardingView: View {
             Spacer()
 
             Button { goNext() } label: {
-                Text("Continue")
-                    .font(.headline)
-                    .foregroundColor(.white)
-                    .frame(maxWidth: .infinity)
-                    .padding(.vertical, 16)
-                    .background(modernButtonBg)
-                    .cornerRadius(14)
+                HStack(spacing: 6) {
+                    Text("Continue")
+                    Image(systemName: "arrow.right")
+                        .font(.body.weight(.semibold))
+                }
+                .frame(maxWidth: .infinity)
             }
+            .buttonStyle(.borderedProminent)
+            .tint(.red)
             .padding(.horizontal, 40)
-            .padding(.bottom, 8)
+            .padding(.bottom, 40)
         }
     }
-
-    // MARK: - Permissions (Unified)
 
     private var permissionsPage: some View {
         VStack(spacing: 0) {
@@ -156,7 +137,6 @@ struct OnboardingView: View {
                     onAllow: { await requestCameraDirect() },
                     onSettings: { await requestCameraSettings() }
                 )
-
                 permissionCard(
                     icon: "mic.fill",
                     title: "Microphone",
@@ -165,7 +145,6 @@ struct OnboardingView: View {
                     onAllow: { await requestMicDirect() },
                     onSettings: { await requestMicSettings() }
                 )
-
                 permissionCard(
                     icon: "photo.on.rectangle.fill",
                     title: "Photo Library",
@@ -186,20 +165,19 @@ struct OnboardingView: View {
 
                 Spacer()
 
+                let allGranted = cameraGranted && micGranted && photoGranted
                 Button("Next") { goNext() }
                     .font(.body.bold())
-                    .foregroundColor(cameraGranted && micGranted && photoGranted ? .red : .white.opacity(0.2))
-                    .disabled(!cameraGranted || !micGranted || !photoGranted)
+                    .foregroundColor(allGranted ? .red : .white.opacity(0.2))
+                    .disabled(!allGranted)
             }
             .padding(.horizontal, 40)
-            .padding(.bottom, 8)
+            .padding(.bottom, 40)
         }
     }
 
     private func permissionCard(
-        icon: String,
-        title: String,
-        subtitle: String,
+        icon: String, title: String, subtitle: String,
         granted: Bool,
         onAllow: @escaping () async -> Void,
         onSettings: @escaping () async -> Void
@@ -215,12 +193,8 @@ struct OnboardingView: View {
             }
 
             VStack(alignment: .leading, spacing: 2) {
-                Text(title)
-                    .font(.subheadline.bold())
-                    .foregroundColor(.white)
-                Text(subtitle)
-                    .font(.caption)
-                    .foregroundColor(.white.opacity(0.5))
+                Text(title).font(.subheadline.bold()).foregroundColor(.white)
+                Text(subtitle).font(.caption).foregroundColor(.white.opacity(0.5))
             }
 
             Spacer()
@@ -231,20 +205,15 @@ struct OnboardingView: View {
                     .foregroundColor(.green)
             } else {
                 VStack(spacing: 4) {
-                    Button {
-                        Task { await onAllow() }
-                    } label: {
+                    Button { Task { await onAllow() } } label: {
                         Text("Allow")
                             .font(.caption.weight(.semibold))
                             .foregroundColor(.white)
-                            .padding(.horizontal, 14)
-                            .padding(.vertical, 7)
+                            .padding(.horizontal, 14).padding(.vertical, 7)
                             .background(Color.red.opacity(0.8))
                             .clipShape(Capsule())
                     }
-                    Button {
-                        Task { await onSettings() }
-                    } label: {
+                    Button { Task { await onSettings() } } label: {
                         Text("Open Settings")
                             .font(.system(size: 10))
                             .foregroundColor(.white.opacity(0.4))
@@ -253,15 +222,13 @@ struct OnboardingView: View {
                 }
             }
         }
-        .padding(.horizontal, 16)
-        .padding(.vertical, 12)
+        .padding(.horizontal, 16).padding(.vertical, 12)
         .background(Color.white.opacity(0.05))
         .clipShape(RoundedRectangle(cornerRadius: 14))
-        .overlay(
-            RoundedRectangle(cornerRadius: 14)
-                .stroke(Color.white.opacity(0.08), lineWidth: 1)
-        )
+        .overlay(RoundedRectangle(cornerRadius: 14).stroke(Color.white.opacity(0.08), lineWidth: 1))
     }
+
+    // MARK: - Permission requests
 
     private func requestCameraDirect() async {
         let status = AVCaptureDevice.authorizationStatus(for: .video)
@@ -274,11 +241,9 @@ struct OnboardingView: View {
             cameraGranted = true
         }
     }
-
     private func requestCameraSettings() async {
         if let url = URL(string: UIApplication.openSettingsURLString) { await UIApplication.shared.open(url) }
     }
-
     private func requestMicDirect() async {
         let status = AVCaptureDevice.authorizationStatus(for: .audio)
         switch status {
@@ -290,11 +255,9 @@ struct OnboardingView: View {
             micGranted = true
         }
     }
-
     private func requestMicSettings() async {
         if let url = URL(string: UIApplication.openSettingsURLString) { await UIApplication.shared.open(url) }
     }
-
     private func requestPhotoDirect() async {
         let status = PHPhotoLibrary.authorizationStatus(for: .addOnly)
         switch status {
@@ -307,7 +270,6 @@ struct OnboardingView: View {
             photoGranted = true
         }
     }
-
     private func requestPhotoSettings() async {
         if let url = URL(string: UIApplication.openSettingsURLString) { await UIApplication.shared.open(url) }
     }
@@ -346,28 +308,21 @@ struct OnboardingView: View {
             Button {
                 onComplete()
             } label: {
-                Text("Start Using FadCam")
-                    .font(.headline)
-                    .foregroundColor(.white)
-                    .frame(maxWidth: .infinity)
-                    .padding(.vertical, 16)
-                    .background(modernButtonBg)
-                    .cornerRadius(14)
+                HStack(spacing: 6) {
+                    Text("Start Using FadCam")
+                    Image(systemName: "chevron.right")
+                        .font(.body.weight(.semibold))
+                }
+                .frame(maxWidth: .infinity)
             }
+            .buttonStyle(.borderedProminent)
+            .tint(.red)
             .padding(.horizontal, 40)
-            .padding(.bottom, 8)
+            .padding(.bottom, 40)
         }
     }
 
-    // MARK: - Helper
-
-    private var modernButtonBg: some View {
-        LinearGradient(
-            colors: [Color.red.opacity(0.9), Color.red.opacity(0.75)],
-            startPoint: .topLeading,
-            endPoint: .bottomTrailing
-        )
-    }
+    // MARK: - Helpers
 
     private func item(icon: String, title: String, desc: String) -> some View {
         HStack(spacing: 14) {
@@ -376,17 +331,11 @@ struct OnboardingView: View {
                 .foregroundColor(.red.opacity(0.8))
                 .frame(width: 28)
             VStack(alignment: .leading, spacing: 2) {
-                Text(title)
-                    .font(.subheadline.bold())
-                    .foregroundColor(.white)
-                Text(desc)
-                    .font(.caption)
-                    .foregroundColor(.white.opacity(0.5))
+                Text(title).font(.subheadline.bold()).foregroundColor(.white)
+                Text(desc).font(.caption).foregroundColor(.white.opacity(0.5))
             }
         }
     }
 }
 
-#Preview {
-    OnboardingView(onComplete: {})
-}
+#Preview { OnboardingView(onComplete: {}) }

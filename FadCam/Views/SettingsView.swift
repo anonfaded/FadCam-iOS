@@ -30,14 +30,13 @@ struct SettingsView: View {
                     .onChange(of: resumeOnboarding) { newValue in
                         if newValue {
                             hasCompletedOnboarding = false
-                            DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) {
-                                resumeOnboarding = false
-                            }
+                        } else {
+                            hasCompletedOnboarding = true
                         }
                     }
                     .tint(.red)
                 } header: { Text("Onboarding") }
-                footer: { Text("Enable to show onboarding on next app launch. Toggle auto-turns off.") }
+                footer: { Text("Toggle ON to show onboarding on next app launch. Toggle OFF to cancel.") }
 
                 Section {
                     Button {

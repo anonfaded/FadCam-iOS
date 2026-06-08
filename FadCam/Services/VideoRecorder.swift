@@ -51,22 +51,20 @@ final class VideoRecorder: @unchecked Sendable {
             let url = self.outputURL
             self.hasStartedSession = false
             self.isPaused = false
-            let finalStatus = writer.status
-            let finalError = writer.error
             writer.finishWriting { [weak self] in
                 guard let self else { return }
-                let status = finalStatus
-                let error = finalError
                 let finalURL = url
+                let finalStatus = writer.status
+                let finalError = writer.error
                 self.writeQueue.async {
                     self.assetWriter = nil
                     self.videoInput = nil
                     self.audioInput = nil
                     self.sessionStarted = false
-                    if status == .completed, let finalURL {
+                    if finalStatus == .completed, let finalURL {
                         completion(.success(finalURL))
                     } else {
-                        completion(.failure(error ?? RecorderError.writerNotStarted))
+                        completion(.failure(finalError ?? RecorderError.writerNotStarted))
                     }
                 }
             }
