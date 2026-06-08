@@ -421,18 +421,28 @@ struct HomeView: View {
         .onChange(of: cameraVM.isPreviewActive) { active in
             guard !isInternalToggle else { return }
             if !active && showCameraPreview {
-                isTransitioning = false
-                showCameraPreview = false
-                irisProgress = 0
-                avatarOpacity = 1.0
-                avatarScale = 1.0
+                // Play full iris-close + fade-in avatar sequence, same as manual sleep
+                isTransitioning = true
+                avatarOpacity = 0
                 setAwakeState()
-                DispatchQueue.main.asyncAfter(deadline: .now() + 0.65) {
-                    withAnimation(.easeInOut(duration: 0.42)) {
-                        setSleepState()
+                withAnimation(.easeIn(duration: 0.48)) {
+                    irisProgress = 0
+                }
+                DispatchQueue.main.asyncAfter(deadline: .now() + 0.48) {
+                    showCameraPreview = false
+                    avatarScale = 1.0
+                    withAnimation(.easeIn(duration: 0.3)) {
+                        avatarOpacity = 1.0
                     }
-                    startBreathingAnimation()
-                    startFloatingZAnimations()
+                    DispatchQueue.main.asyncAfter(deadline: .now() + 0.65) {
+                        guard isTransitioning else { return }
+                        withAnimation(.easeInOut(duration: 0.42)) {
+                            setSleepState()
+                        }
+                        startBreathingAnimation()
+                        startFloatingZAnimations()
+                        isTransitioning = false
+                    }
                 }
             }
         }
@@ -470,8 +480,11 @@ struct HomeView: View {
                     cameraVM.isPreviewActive = false
                     cameraVM.stopSession()
                 }
-                avatarOpacity = 1.0
+                avatarOpacity = 0
                 avatarScale = 1.0
+                withAnimation(.easeIn(duration: 0.3)) {
+                    avatarOpacity = 1.0
+                }
                 DispatchQueue.main.asyncAfter(deadline: .now() + 0.65) {
                     guard isTransitioning else { return }
                     withAnimation(.easeInOut(duration: 0.42)) {
