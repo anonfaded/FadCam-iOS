@@ -1,22 +1,28 @@
 import AVFoundation
 import Photos
 
+protocol CameraServiceSampleDelegate: AnyObject {
+    func cameraService(_ service: CameraService, didOutputVideo sampleBuffer: CMSampleBuffer)
+    func cameraService(_ service: CameraService, didOutputAudio sampleBuffer: CMSampleBuffer)
+}
+
 class CameraService: NSObject {
     let session = AVCaptureSession()
-    let movieFileOutput = AVCaptureMovieFileOutput()
     let photoOutput = AVCapturePhotoOutput()
+    let recorder = VideoRecorder()
+
     private var videoDeviceInput: AVCaptureDeviceInput?
     private var audioDeviceInput: AVCaptureDeviceInput?
-    private var recordingCompletion: ((Result<URL, Error>) -> Void)?
+    private var videoDataOutput: AVCaptureVideoDataOutput?
+    private var audioDataOutput: AVCaptureAudioDataOutput?
+
     private var photoCompletion: ((Result<URL, Error>) -> Void)?
+
     private(set) var currentCamera: AVCaptureDevice.Position = .back
 
     override init() {
         super.init()
         session.sessionPreset = .high
-        if session.canAddOutput(movieFileOutput) {
-            session.addOutput(movieFileOutput)
-        }
         if session.canAddOutput(photoOutput) {
             session.addOutput(photoOutput)
         }
@@ -27,8 +33,11 @@ class CameraService: NSObject {
         defer { session.commitConfiguration() }
 
         session.inputs.forEach { session.removeInput($0) }
+        session.outputs.filter { $0 !== photoOutput }.forEach { session.removeOutput($0) }
         videoDeviceInput = nil
         audioDeviceInput = nil
+        videoDataOutput = nil
+        audioDataOutput = nil
 
         guard let camera = AVCaptureDevice.default(.builtInWideAngleCamera, for: .video, position: position) else {
             throw CameraError.noCameraAvailable
@@ -48,6 +57,22 @@ class CameraService: NSObject {
                 audioDeviceInput = audioInput
             }
         }
+
+        let vDataOutput = AVCaptureVideoDataOutput()
+        vDataOutput.alwaysDiscardsLateVideoFrames = true
+        vDataOutput.videoSettings = [kCVPixelBufferPixelFormatTypeKey as String: kCVPixelFormatType_32BGRA]
+        vDataOutput.setSampleBufferDelegate(self, queue: DispatchQueue(label: "com.fadcam.video.samples", qos: .userInitiated))
+        if session.canAddOutput(vDataOutput) {
+            session.addOutput(vDataOutput)
+            videoDataOutput = vDataOutput
+        }
+
+        let aDataOutput = AVCaptureAudioDataOutput()
+        aDataOutput.setSampleBufferDelegate(self, queue: DispatchQueue(label: "com.fadcam.audio.samples", qos: .userInitiated))
+        if session.canAddOutput(aDataOutput) {
+            session.addOutput(aDataOutput)
+            audioDataOutput = aDataOutput
+        }
     }
 
     func switchCamera() throws {
@@ -55,19 +80,14 @@ class CameraService: NSObject {
         guard let camera = AVCaptureDevice.default(.builtInWideAngleCamera, for: .video, position: newPosition) else {
             throw CameraError.noCameraAvailable
         }
-
         session.beginConfiguration()
         defer { session.commitConfiguration() }
-
         if let existingInput = videoDeviceInput {
             session.removeInput(existingInput)
         }
-
         let videoInput = try AVCaptureDeviceInput(device: camera)
         guard session.canAddInput(videoInput) else {
-            if let oldInput = videoDeviceInput {
-                session.addInput(oldInput)
-            }
+            if let oldInput = videoDeviceInput { session.addInput(oldInput) }
             throw CameraError.cannotAddInput
         }
         session.addInput(videoInput)
@@ -79,19 +99,12 @@ class CameraService: NSObject {
         PHPhotoLibrary.shared().performChanges {
             PHAssetChangeRequest.creationRequestForAssetFromVideo(atFileURL: url)
         } completionHandler: { _, error in
-            if let error = error {
-                print("Failed to save to Photos: \(error)")
-            }
+            if let error = error { print("Failed to save to Photos: \(error)") }
         }
     }
 
-    var hasTorch: Bool {
-        videoDeviceInput?.device.hasTorch ?? false
-    }
-
-    var isTorchOn: Bool {
-        videoDeviceInput?.device.torchMode == .on
-    }
+    var hasTorch: Bool { videoDeviceInput?.device.hasTorch ?? false }
+    var isTorchOn: Bool { videoDeviceInput?.device.torchMode == .on }
 
     func toggleTorch() {
         guard let device = videoDeviceInput?.device, device.hasTorch else { return }
@@ -99,9 +112,7 @@ class CameraService: NSObject {
             try device.lockForConfiguration()
             device.torchMode = device.torchMode == .on ? .off : .on
             device.unlockForConfiguration()
-        } catch {
-            print("Torch toggle failed: \(error)")
-        }
+        } catch { print("Torch toggle failed: \(error)") }
     }
 
     func turnOffTorch() {
@@ -113,13 +124,8 @@ class CameraService: NSObject {
         } catch {}
     }
 
-    var minZoomFactor: CGFloat {
-        videoDeviceInput?.device.minAvailableVideoZoomFactor ?? 1.0
-    }
-
-    var maxZoomFactor: CGFloat {
-        videoDeviceInput?.device.activeFormat.videoMaxZoomFactor ?? 5.0
-    }
+    var minZoomFactor: CGFloat { videoDeviceInput?.device.minAvailableVideoZoomFactor ?? 1.0 }
+    var maxZoomFactor: CGFloat { videoDeviceInput?.device.activeFormat.videoMaxZoomFactor ?? 5.0 }
 
     func setZoom(_ factor: CGFloat) {
         guard let device = videoDeviceInput?.device else { return }
@@ -131,18 +137,7 @@ class CameraService: NSObject {
         } catch {}
     }
 
-    var currentZoom: CGFloat {
-        videoDeviceInput?.device.videoZoomFactor ?? 1.0
-    }
-
-    func startRecording(to url: URL, completion: @escaping (Result<URL, Error>) -> Void) {
-        recordingCompletion = completion
-        movieFileOutput.startRecording(to: url, recordingDelegate: self)
-    }
-
-    func stopRecording() {
-        movieFileOutput.stopRecording()
-    }
+    var currentZoom: CGFloat { videoDeviceInput?.device.videoZoomFactor ?? 1.0 }
 
     func capturePhoto(completion: @escaping (Result<URL, Error>) -> Void) {
         photoCompletion = completion
@@ -150,21 +145,23 @@ class CameraService: NSObject {
         photoOutput.capturePhoto(with: settings, delegate: self)
     }
 
-    var isRecording: Bool {
-        movieFileOutput.isRecording
+    func fadShotDirectory(for position: AVCaptureDevice.Position) -> URL {
+        let documents = FileManager.default.urls(for: .documentDirectory, in: .userDomainMask)[0]
+        let fadcamDir = documents.appendingPathComponent("FadCam", isDirectory: true)
+        let fadshotDir = fadcamDir.appendingPathComponent("FadShot", isDirectory: true)
+        let cameraDir = fadshotDir.appendingPathComponent(position == .back ? "Back" : "Front", isDirectory: true)
+        try? FileManager.default.createDirectory(at: cameraDir, withIntermediateDirectories: true)
+        return cameraDir
     }
 }
 
-extension CameraService: AVCaptureFileOutputRecordingDelegate {
-    func fileOutput(_ output: AVCaptureFileOutput, didStartRecordingTo fileURL: URL, from connections: [AVCaptureConnection]) {}
-
-    func fileOutput(_ output: AVCaptureFileOutput, didFinishRecordingTo outputFileURL: URL, from connections: [AVCaptureConnection], error: Error?) {
-        if let error = error {
-            recordingCompletion?(.failure(error))
-        } else {
-            recordingCompletion?(.success(outputFileURL))
+extension CameraService: AVCaptureVideoDataOutputSampleBufferDelegate, AVCaptureAudioDataOutputSampleBufferDelegate {
+    func captureOutput(_ output: AVCaptureOutput, didOutput sampleBuffer: CMSampleBuffer, from connection: AVCaptureConnection) {
+        if output === videoDataOutput {
+            recorder.appendVideo(sampleBuffer)
+        } else if output === audioDataOutput {
+            recorder.appendAudio(sampleBuffer)
         }
-        recordingCompletion = nil
     }
 }
 
@@ -180,13 +177,11 @@ extension CameraService: AVCapturePhotoCaptureDelegate {
             photoCompletion = nil
             return
         }
-        let documents = FileManager.default.urls(for: .documentDirectory, in: .userDomainMask)[0]
-        let fadcamDir = documents.appendingPathComponent("FadCam", isDirectory: true)
-        try? FileManager.default.createDirectory(at: fadcamDir, withIntermediateDirectories: true)
+        let dir = fadShotDirectory(for: currentCamera)
         let formatter = DateFormatter()
         formatter.dateFormat = "yyyyMMdd_HHmmss"
         let filename = "FadShot_\(formatter.string(from: Date())).jpg"
-        let url = fadcamDir.appendingPathComponent(filename)
+        let url = dir.appendingPathComponent(filename)
         do {
             try data.write(to: url)
             photoCompletion?(.success(url))

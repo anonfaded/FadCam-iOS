@@ -15,6 +15,17 @@ class ThumbnailService {
             return cached
         }
 
+        // Handle image files directly
+        let ext = url.pathExtension.lowercased()
+        if ["jpg", "jpeg", "png", "heic", "heif"].contains(ext) {
+            if let data = try? Data(contentsOf: url), let image = UIImage(data: data) {
+                cache.setObject(image, forKey: nsurl)
+                return image
+            }
+            return nil
+        }
+
+        // Handle video files with AVAssetImageGenerator
         let asset = AVAsset(url: url)
         let generator = AVAssetImageGenerator(asset: asset)
         generator.appliesPreferredTrackTransform = true

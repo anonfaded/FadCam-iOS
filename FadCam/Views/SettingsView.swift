@@ -8,6 +8,7 @@ struct SettingsView: View {
     @State private var alertMessage = ""
     @State private var showGitHubLink = false
     @State private var showWebsiteLink = false
+    @State private var showTrash = false
 
     var body: some View {
         NavigationView {
@@ -26,7 +27,11 @@ struct SettingsView: View {
                         Label("Show Onboarding Again", systemImage: "arrow.counterclockwise")
                     }
                     .onChange(of: resumeOnboarding) { newValue in
-                        if newValue { DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) { resumeOnboarding = false } }
+                        if newValue {
+                            DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) {
+                                resumeOnboarding = false
+                            }
+                        }
                     }
                     .tint(.red)
                 } header: { Text("Onboarding") }
@@ -63,6 +68,20 @@ struct SettingsView: View {
                 } header: { Text("Information") }
 
                 Section {
+                    Button {
+                        showTrash = true
+                    } label: {
+                        HStack {
+                            Label("Trash", systemImage: "trash")
+                            Spacer()
+                            Image(systemName: "chevron.right").font(.caption).foregroundColor(.secondary)
+                        }
+                    }
+                    .foregroundColor(.primary)
+                } header: { Text("Danger Zone") }
+                footer: { Text("Trashed files. Auto-cleanup settings are in the Trash screen.") }
+
+                Section {
                     VStack(spacing: 8) {
                         if let logo = UIImage(named: "HeaderLogo") {
                             Image(uiImage: logo).resizable().aspectRatio(contentMode: .fit).frame(height: 24).opacity(0.5)
@@ -76,16 +95,27 @@ struct SettingsView: View {
                 }
             }
             .navigationTitle("Settings")
+            .fullScreenCover(isPresented: $showTrash) {
+                TrashView()
+            }
             .sheet(isPresented: $showGitHubLink) {
-                LinkPreviewView(url: URL(string: "https://github.com/anonfaded/FadCam-iOS")!, title: "FadCam iOS Source Code")
+                LinkPreviewView(
+                    url: URL(string: "https://github.com/anonfaded/FadCam-iOS")!,
+                    title: "FadCam iOS Source Code"
+                )
             }
             .sheet(isPresented: $showWebsiteLink) {
-                LinkPreviewView(url: URL(string: "https://fadcam.fadseclab.com")!, title: "FadCam Website")
+                LinkPreviewView(
+                    url: URL(string: "https://fadcam.fadseclab.com")!,
+                    title: "FadCam Website"
+                )
             }
             .alert("Permission Required", isPresented: $showingAlert) {
                 Button("Cancel", role: .cancel) { saveToPhotos = false }
                 Button("Settings") {
-                    if let url = URL(string: UIApplication.openSettingsURLString) { UIApplication.shared.open(url) }
+                    if let url = URL(string: UIApplication.openSettingsURLString) {
+                        UIApplication.shared.open(url)
+                    }
                 }
             } message: { Text(alertMessage) }
         }
@@ -98,13 +128,62 @@ struct SettingsView: View {
             Task {
                 if await PHPhotoLibrary.requestAuthorization(for: .addOnly) != .authorized {
                     await MainActor.run {
-                        saveToPhotos = false; alertMessage = "Photo library access needed."; showingAlert = true
+                        saveToPhotos = false
+                        alertMessage = "Photo library access needed."
+                        showingAlert = true
                     }
                 }
             }
         case .denied, .restricted:
-            saveToPhotos = false; alertMessage = "Access denied. Enable in Settings."; showingAlert = true
+            saveToPhotos = false
+            alertMessage = "Access denied. Enable in Settings."
+            showingAlert = true
         @unknown default: break
+        }
+    }
+}
+
+enum TrashAutoDeleteOption: String, CaseIterable, Identifiable {
+    case immediately
+    case oneHour
+    case fiveHours
+    case tenHours
+    case oneDay
+    case sevenDays
+    case thirtyDays
+    case sixtyDays
+    case ninetyDays
+    case never
+
+    var id: String { rawValue }
+
+    var label: String {
+        switch self {
+        case .immediately: return "Immediately"
+        case .oneHour: return "After 1 hour"
+        case .fiveHours: return "After 5 hours"
+        case .tenHours: return "After 10 hours"
+        case .oneDay: return "After 1 day"
+        case .sevenDays: return "After 7 days"
+        case .thirtyDays: return "After 30 days (Default)"
+        case .sixtyDays: return "After 60 days"
+        case .ninetyDays: return "After 90 days"
+        case .never: return "Never"
+        }
+    }
+
+    var seconds: Int {
+        switch self {
+        case .immediately: return 0
+        case .oneHour: return 3600
+        case .fiveHours: return 18000
+        case .tenHours: return 36000
+        case .oneDay: return 86400
+        case .sevenDays: return 604800
+        case .thirtyDays: return 2592000
+        case .sixtyDays: return 5184000
+        case .ninetyDays: return 7776000
+        case .never: return -1
         }
     }
 }
@@ -127,21 +206,47 @@ struct AboutView: View {
             }
 
             Section {
-                HStack { Text("Version"); Spacer(); Text(Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String ?? "1.0").foregroundColor(.secondary) }
-                HStack { Text("Build"); Spacer(); Text(Bundle.main.infoDictionary?["CFBundleVersion"] as? String ?? "1").foregroundColor(.secondary) }
+                HStack {
+                    Text("Version")
+                    Spacer()
+                    Text(Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String ?? "1.0")
+                        .foregroundColor(.secondary)
+                }
+                HStack {
+                    Text("Build")
+                    Spacer()
+                    Text(Bundle.main.infoDictionary?["CFBundleVersion"] as? String ?? "1")
+                        .foregroundColor(.secondary)
+                }
             } header: { Text("App Info") }
 
             Section {
-                HStack { Text("iOS"); Spacer(); Text(UIDevice.current.systemVersion).foregroundColor(.secondary) }
-                HStack { Text("Device"); Spacer(); Text(UIDevice.current.model).foregroundColor(.secondary) }
+                HStack {
+                    Text("iOS")
+                    Spacer()
+                    Text(UIDevice.current.systemVersion).foregroundColor(.secondary)
+                }
+                HStack {
+                    Text("Device")
+                    Spacer()
+                    Text(UIDevice.current.model).foregroundColor(.secondary)
+                }
             } header: { Text("System") }
 
             Section {
                 Link(destination: URL(string: "https://github.com/anonfaded/FadCam-iOS")!) {
-                    HStack { Text("GitHub"); Spacer(); Image(systemName: "arrow.up.right").font(.caption).foregroundColor(.secondary) }
+                    HStack {
+                        Text("GitHub")
+                        Spacer()
+                        Image(systemName: "arrow.up.right").font(.caption).foregroundColor(.secondary)
+                    }
                 }
                 Link(destination: URL(string: "https://fadcam.fadseclab.com")!) {
-                    HStack { Text("Website"); Spacer(); Image(systemName: "arrow.up.right").font(.caption).foregroundColor(.secondary) }
+                    HStack {
+                        Text("Website")
+                        Spacer()
+                        Image(systemName: "arrow.up.right").font(.caption).foregroundColor(.secondary)
+                    }
                 }
             } header: { Text("Links") }
 

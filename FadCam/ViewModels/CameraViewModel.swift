@@ -4,7 +4,7 @@ import Combine
 import Photos
 
 @MainActor
-final class CameraViewModel: ObservableObject {
+final class CameraViewModel: NSObject, ObservableObject {
     @Published var recordingState: RecordingState = .ready
     @Published var isPaused = false
     @Published var isPermissionGranted = false
@@ -16,20 +16,26 @@ final class CameraViewModel: ObservableObject {
     @Published var currentCamera: AVCaptureDevice.Position = .back
     @Published var isTorchOn = false
     @Published var zoomFactor: CGFloat = 1.0
+    @Published var isCameraReady = false
+    @Published var elapsedTime: TimeInterval = 0
+    @Published var fadCamStorageBytes: Int64 = 0
 
     let cameraService = CameraService()
     private var recordingStartTime: Date?
+    private var totalPausedDuration: TimeInterval = 0
+    private var lastPauseTime: Date?
     private var timerCancellable: AnyCancellable?
-
-    @Published var elapsedTime: TimeInterval = 0
+    private var storageRefreshTimer: AnyCancellable?
 
     var recordingURL: URL {
         let documents = FileManager.default.urls(for: .documentDirectory, in: .userDomainMask)[0]
         let fadcamDir = documents.appendingPathComponent("FadCam", isDirectory: true)
+        let cameraDir = fadcamDir.appendingPathComponent(currentCamera == .back ? "Back" : "Front", isDirectory: true)
+        try? FileManager.default.createDirectory(at: cameraDir, withIntermediateDirectories: true)
         let formatter = DateFormatter()
         formatter.dateFormat = "yyyyMMdd_HHmmss"
-        let filename = "FadCam_\(formatter.string(from: Date())).mov"
-        return fadcamDir.appendingPathComponent(filename)
+        let filename = "FadCam_\(formatter.string(from: Date())).mp4"
+        return cameraDir.appendingPathComponent(filename)
     }
 
     var availableStorage: (used: Int64, total: Int64, free: Int64)? {
@@ -44,40 +50,79 @@ final class CameraViewModel: ObservableObject {
         return nil
     }
 
+    var totalMediaCount: Int {
+        let dir = FileManager.default.urls(for: .documentDirectory, in: .userDomainMask)[0]
+            .appendingPathComponent("FadCam", isDirectory: true)
+        guard FileManager.default.fileExists(atPath: dir.path),
+              let enumerator = FileManager.default.enumerator(at: dir, includingPropertiesForKeys: nil) else { return 0 }
+        let trashPath = dir.appendingPathComponent("Trash").path
+        var count = 0
+        for case let fileURL as URL in enumerator {
+            if fileURL.path.hasPrefix(trashPath) { enumerator.skipDescendants(); continue }
+            let ext = fileURL.pathExtension.lowercased()
+            if ["mov", "mp4", "jpg", "jpeg", "png", "heic"].contains(ext) { count += 1 }
+        }
+        return count
+    }
+
     var estimatedRecordingTime: String {
         guard let storage = availableStorage else { return "Unknown" }
-        let freeBytes = storage.free
-        let seconds = freeBytes / 1_000_000
-        let hours = seconds / 3600
-        let minutes = (seconds % 3600) / 60
-        if hours > 0 { return "\(hours)h \(minutes)m" }
-        return "\(minutes)m"
+        let totalSec = storage.free / 1_000_000
+        if totalSec >= 86400 {
+            let days = totalSec / 86400
+            let hrs = (totalSec % 86400) / 3600
+            let mins = (totalSec % 3600) / 60
+            if hrs > 0 { return "\(days)d \(hrs)h \(mins)m" }
+            return "\(days)d \(mins)m"
+        }
+        let hours = totalSec / 3600
+        let mins = (totalSec % 3600) / 60
+        let secs = totalSec % 60
+        if hours >= 1 { return "\(hours)h \(mins)m \(secs)s" }
+        return "\(mins)m \(secs)s"
     }
 
-    var totalVideos: Int {
-        let dir = FileManager.default.urls(for: .documentDirectory, in: .userDomainMask)[0].appendingPathComponent("FadCam", isDirectory: true)
-        guard FileManager.default.fileExists(atPath: dir.path) else { return 0 }
-        guard let files = try? FileManager.default.contentsOfDirectory(at: dir, includingPropertiesForKeys: nil) else { return 0 }
-        return files.filter {
-            let ext = $0.pathExtension.lowercased()
-            return ext == "mov" || ext == "mp4"
-        }.count
+    override init() {
+        super.init()
+        startStorageRefreshTimer()
+        refreshStorage()
     }
 
-    var totalVideosSize: Int64 {
-        let dir = FileManager.default.urls(for: .documentDirectory, in: .userDomainMask)[0].appendingPathComponent("FadCam", isDirectory: true)
-        guard FileManager.default.fileExists(atPath: dir.path) else { return 0 }
-        guard let files = try? FileManager.default.contentsOfDirectory(at: dir, includingPropertiesForKeys: [.fileSizeKey]) else { return 0 }
+    deinit {
+        storageRefreshTimer?.cancel()
+    }
+
+    func refreshStorage() {
+        let dir = FileManager.default.urls(for: .documentDirectory, in: .userDomainMask)[0]
+            .appendingPathComponent("FadCam", isDirectory: true)
+        guard FileManager.default.fileExists(atPath: dir.path) else {
+            fadCamStorageBytes = 0
+            return
+        }
         var total: Int64 = 0
-        for file in files {
-            let ext = file.pathExtension.lowercased()
-            if ext == "mov" || ext == "mp4" {
-                if let values = try? file.resourceValues(forKeys: [.fileSizeKey]), let size = values.fileSize {
-                    total += Int64(size)
-                }
+        let trashPath = dir.appendingPathComponent("Trash").path
+        if let enumerator = FileManager.default.enumerator(
+            at: dir,
+            includingPropertiesForKeys: [.fileSizeKey, .isRegularFileKey],
+            options: [.skipsHiddenFiles]
+        ) {
+            for case let fileURL as URL in enumerator {
+                if fileURL.path.hasPrefix(trashPath) { enumerator.skipDescendants() }
+                guard let values = try? fileURL.resourceValues(forKeys: [.fileSizeKey, .isRegularFileKey]),
+                      values.isRegularFile == true,
+                      let size = values.fileSize else { continue }
+                total += Int64(size)
             }
         }
-        return total
+        fadCamStorageBytes = total
+    }
+
+    private func startStorageRefreshTimer() {
+        storageRefreshTimer = Timer.publish(every: 5.0, on: .main, in: .common)
+            .autoconnect()
+            .sink { [weak self] _ in
+                self?.refreshStorage()
+            }
     }
 
     func checkPermissions() {
@@ -90,6 +135,7 @@ final class CameraViewModel: ObservableObject {
         guard isPermissionGranted else { return }
         do {
             try cameraService.setupCamera(position: currentCamera)
+            isCameraReady = true
         } catch {
             errorMessage = error.localizedDescription
             recordingState = .error(error.localizedDescription)
@@ -162,6 +208,7 @@ final class CameraViewModel: ObservableObject {
                     if self.isPhotoPermissionGranted {
                         self.cameraService.saveToPhotos(url: url)
                     }
+                    self.refreshStorage()
                 case .failure(let error):
                     self.errorMessage = error.localizedDescription
                 }
@@ -185,39 +232,76 @@ final class CameraViewModel: ObservableObject {
     private func beginRecording() {
         let url = recordingURL
         try? FileManager.default.createDirectory(at: url.deletingLastPathComponent(), withIntermediateDirectories: true)
-        cameraService.startRecording(to: url) { [weak self] result in
+        do {
+            try cameraService.recorder.start(to: url)
+        } catch {
+            errorMessage = "Failed to start recorder: \(error.localizedDescription)"
+            return
+        }
+        recordingState = .recording
+        isPaused = false
+        if recordingStartTime == nil {
+            recordingStartTime = Date()
+        }
+        totalPausedDuration = 0
+        lastPauseTime = nil
+        elapsedTime = 0
+        startTimer()
+    }
+
+    func pauseRecording() {
+        guard recordingState == .recording, !isPaused else { return }
+        isPaused = true
+        lastPauseTime = Date()
+        cameraService.recorder.pause()
+        stopTimer()
+    }
+
+    func resumeRecording() {
+        guard recordingState == .recording, isPaused else { return }
+        if let lastPause = lastPauseTime {
+            totalPausedDuration += Date().timeIntervalSince(lastPause)
+        }
+        lastPauseTime = nil
+        isPaused = false
+        cameraService.recorder.resume()
+        startTimer()
+    }
+
+    func stopRecording() {
+        guard recordingState == .recording else { return }
+        isPaused = false
+        lastPauseTime = nil
+        totalPausedDuration = 0
+        recordingStartTime = nil
+        stopTimer()
+        isBatterySaverActive = false
+        UIScreen.main.brightness = 0.5
+        cameraService.recorder.stop { [weak self] result in
             Task { @MainActor in
                 guard let self else { return }
                 switch result {
                 case .success(let savedURL):
                     self.recordingState = .ready
                     self.elapsedTime = 0
-                    self.isBatterySaverActive = false
-                    UIScreen.main.brightness = 0.5
-                    if self.isPhotoPermissionGranted { self.cameraService.saveToPhotos(url: savedURL) }
+                    if self.isPhotoPermissionGranted {
+                        self.cameraService.saveToPhotos(url: savedURL)
+                    }
+                    self.refreshStorage()
                 case .failure(let error):
                     self.recordingState = .error(error.localizedDescription)
                     self.errorMessage = error.localizedDescription
                 }
             }
         }
-        recordingState = .recording
-        recordingStartTime = Date()
-        startTimer()
-    }
-
-    func stopRecording() {
-        guard recordingState == .recording else { return }
-        cameraService.stopRecording()
-        stopTimer()
-        isBatterySaverActive = false
-        UIScreen.main.brightness = 0.5
     }
 
     private func startTimer() {
+        timerCancellable?.cancel()
         timerCancellable = Timer.publish(every: 0.1, on: .main, in: .common).autoconnect().sink { [weak self] _ in
             guard let self, let start = self.recordingStartTime else { return }
-            self.elapsedTime = Date().timeIntervalSince(start)
+            let total = Date().timeIntervalSince(start) - self.totalPausedDuration
+            self.elapsedTime = max(0, total)
         }
     }
 
