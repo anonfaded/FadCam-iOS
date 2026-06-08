@@ -4,10 +4,13 @@ import AVFoundation
 struct TrashView: View {
     @StateObject private var vm = TrashViewModel()
     @AppStorage("FadCam.trashAutoDeleteSeconds") private var autoDeleteSeconds: Int = 2592000
+    @Environment(\.dismiss) private var dismiss
     @State private var showEmptyConfirm = false
+    @State private var showRestoreConfirm = false
     @State private var itemToDelete: TrashItem?
     @State private var showDeleteConfirm = false
     @State private var permanentDeleteText = ""
+    @State private var emptyDeleteText = ""
     @State private var actionToast: String?
     @State private var isSelectionMode = false
     @State private var selectedIDs = Set<String>()
@@ -19,77 +22,48 @@ struct TrashView: View {
 
                 if vm.isLoading {
                     ProgressView().tint(.red)
-                } else if vm.items.isEmpty {
-                    emptyState
                 } else {
-                    contentView
+                    ScrollView {
+                        VStack(alignment: .leading, spacing: 18) {
+                            statsHeader.padding(.top, 4)
+
+                            if vm.items.isEmpty {
+                                emptyStateContent
+                            } else {
+                                itemsContent
+                            }
+                        }
+                        .padding(.bottom, isSelectionMode ? 120 : 100)
+                    }
                 }
 
-                if isSelectionMode {
-                    selectionBottomBar
-                }
-
-                if let toast = actionToast {
-                    toastView(toast)
-                }
+                if isSelectionMode { selectionBottomBar }
+                if let toast = actionToast { toastView(toast) }
             }
             .navigationTitle(isSelectionMode ? selectionTitle : "Trash")
-            .navigationBarTitleDisplayMode(isSelectionMode ? .inline : .large)
-            .toolbar {
-                ToolbarItem(placement: .navigationBarLeading) {
-                    if isSelectionMode {
-                        Button {
-                            withAnimation { isSelectionMode = false; selectedIDs.removeAll() }
-                        } label: {
-                            Text("Cancel").font(.system(size: 16, weight: .semibold)).foregroundColor(.white)
-                        }
-                    }
-                }
-                ToolbarItem(placement: .navigationBarTrailing) {
-                    HStack(spacing: 12) {
-                        if isSelectionMode {
-                            Button { toggleSelectAll() } label: {
-                                Text(selectedIDs.count == vm.items.count ? "Deselect" : "Select All")
-                                    .font(.system(size: 13)).foregroundColor(.red)
-                            }
-                            Button {
-                                showEmptyConfirm = true
-                            } label: {
-                                Text("Delete").font(.system(size: 13, weight: .semibold)).foregroundColor(.red)
-                            }
-                        } else {
-                            Button { vm.loadItems() } label: {
-                                Image(systemName: "arrow.clockwise").font(.system(size: 14)).foregroundColor(.red)
-                            }
-                            if !vm.items.isEmpty {
-                                Button(role: .destructive) { showEmptyConfirm = true } label: {
-                                    Text("Empty").font(.system(size: 13, weight: .semibold)).foregroundColor(.red)
-                                }
-                            }
-                        }
-                    }
-                }
-            }
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar { toolbarContent }
             .refreshable { vm.loadItems() }
             .onAppear { vm.loadItems() }
             .alert("Empty Trash", isPresented: $showEmptyConfirm) {
+                TextField("Type DELETE to confirm", text: $emptyDeleteText)
+                Button("Cancel", role: .cancel) { emptyDeleteText = "" }
+                Button(emptyAlertButtonLabel, role: .destructive) {
+                    let count = isSelectionMode ? selectedIDs.count : vm.items.count
+                    executeEmptyAction()
+                    showToast(count == 1 ? "1 item deleted" : "\(count) items deleted")
+                    emptyDeleteText = ""
+                }
+                .disabled(emptyDeleteText != "DELETE")
+            } message: { Text(emptyAlertMessage) }
+            .alert("Restore", isPresented: $showRestoreConfirm) {
                 Button("Cancel", role: .cancel) {}
-                Button("Delete All", role: .destructive) {
-                    if isSelectionMode {
-                        batchDelete()
-                        withAnimation { isSelectionMode = false; selectedIDs.removeAll() }
-                    } else {
-                        vm.emptyTrash()
-                    }
-                    showToast("Trash emptied")
+                Button("Restore") {
+                    let count = isSelectionMode ? selectedIDs.count : vm.items.count
+                    executeRestoreAction()
+                    showToast(count == 1 ? "1 item restored" : "\(count) items restored")
                 }
-            } message: {
-                if isSelectionMode {
-                    Text("Permanently delete \(selectedIDs.count) selected item(s)? This cannot be undone.")
-                } else {
-                    Text("Permanently delete all items in Trash? This cannot be undone.")
-                }
-            }
+            } message: { Text(restoreAlertMessage) }
             .alert("Delete Permanently?", isPresented: $showDeleteConfirm) {
                 TextField("Type DELETE to confirm", text: $permanentDeleteText)
                 Button("Cancel", role: .cancel) {
@@ -112,10 +86,82 @@ struct TrashView: View {
         .navigationViewStyle(.stack)
     }
 
+    @ToolbarContentBuilder
+    private var toolbarContent: some ToolbarContent {
+        ToolbarItem(placement: .navigationBarLeading) {
+            if isSelectionMode {
+                Button {
+                    withAnimation { isSelectionMode = false; selectedIDs.removeAll() }
+                } label: {
+                    Text("Cancel")
+                        .font(.system(size: 16, weight: .semibold))
+                        .foregroundColor(.white)
+                }
+            } else {
+                Button {
+                    dismiss()
+                } label: {
+                    HStack(spacing: 3) {
+                        Image(systemName: "chevron.left")
+                            .font(.system(size: 14, weight: .semibold))
+                        Text("Back")
+                            .font(.system(size: 16))
+                    }
+                    .foregroundColor(.red)
+                }
+            }
+        }
+        ToolbarItem(placement: .navigationBarTrailing) {
+            if isSelectionMode {
+                HStack(spacing: 8) {
+                    Button {
+                        if selectedIDs.count == 0 { toggleSelectAll() }
+                        else { toggleSelectAll() }
+                    } label: {
+                        let all = selectedIDs.count == vm.items.count
+                        Text(all ? "None" : "All")
+                            .font(.system(size: 13, weight: .medium))
+                            .foregroundColor(.red)
+                    }
+                    Button {
+                        showEmptyConfirm = true
+                    } label: {
+                        Text("Delete")
+                            .font(.system(size: 13, weight: .semibold))
+                            .foregroundColor(.red)
+                    }
+                }
+            } else {
+                HStack(spacing: 12) {
+                    Button {
+                        showRestoreConfirm = true
+                    } label: {
+                        Image(systemName: "arrow.uturn.backward")
+                            .font(.system(size: 14))
+                            .foregroundColor(.green)
+                    }
+                    Button {
+                        showEmptyConfirm = true
+                    } label: {
+                        HStack(spacing: 3) {
+                            Image(systemName: "trash")
+                                .font(.system(size: 12))
+                            Text("Empty")
+                                .font(.system(size: 13, weight: .semibold))
+                        }
+                        .foregroundColor(.red)
+                    }
+                }
+            }
+        }
+    }
+
     private var selectionTitle: String {
+        let c = selectedIDs.count
+        if c == 0 { return "Trash" }
         let sel = vm.items.filter { selectedIDs.contains($0.id) }
         let totalSize = ByteCountFormatter.string(fromByteCount: sel.reduce(0) { $0 + $1.fileSize }, countStyle: .file)
-        return "\(selectedIDs.count) selected · \(totalSize)"
+        return "\(c) selected · \(totalSize)"
     }
 
     private var selectionBottomBar: some View {
@@ -123,13 +169,13 @@ struct TrashView: View {
             Spacer()
             HStack(spacing: 0) {
                 Button {
-                    batchRestore()
-                    showToast("Restored \(selectedIDs.count) items")
-                    withAnimation { isSelectionMode = false; selectedIDs.removeAll() }
+                    showRestoreConfirm = true
                 } label: {
                     VStack(spacing: 3) {
-                        Image(systemName: "arrow.uturn.backward").font(.system(size: 16))
-                        Text("Restore").font(.system(size: 10, weight: .medium))
+                        Image(systemName: "arrow.uturn.backward")
+                            .font(.system(size: 16))
+                        Text("Restore")
+                            .font(.system(size: 10, weight: .medium))
                     }
                     .foregroundColor(.white)
                     .frame(maxWidth: .infinity)
@@ -155,6 +201,64 @@ struct TrashView: View {
         }
     }
 
+    // MARK: - Alert helpers
+
+    private var emptyAlertButtonLabel: String {
+        if isSelectionMode {
+            return selectedIDs.count == 1 ? "Delete 1 item" : "Delete \(selectedIDs.count) items"
+        }
+        return vm.items.count == 1 ? "Delete 1 item" : "Delete All"
+    }
+
+    private var emptyAlertMessage: String {
+        if isSelectionMode {
+            let c = selectedIDs.count
+            return c == 1
+                ? "Permanently delete 1 selected item? This cannot be undone."
+                : "Permanently delete \(c) selected items? This cannot be undone."
+        }
+        let c = vm.items.count
+        return c == 1
+            ? "Permanently delete 1 item in Trash? This cannot be undone."
+            : "Permanently delete all \(c) items in Trash? This cannot be undone."
+    }
+
+    private var restoreAlertMessage: String {
+        if isSelectionMode {
+            let c = selectedIDs.count
+            return c == 1 ? "Restore 1 selected item?" : "Restore \(c) selected items?"
+        }
+        return vm.items.count == 1 ? "Restore 1 item from Trash?" : "Restore all \(vm.items.count) items from Trash?"
+    }
+
+    private var restoreSuccessMessage: String {
+        let c = isSelectionMode ? selectedIDs.count : vm.items.count
+        return c == 1 ? "1 item restored" : "\(c) items restored"
+    }
+
+    private func executeEmptyAction() {
+        if isSelectionMode {
+            batchDelete()
+            withAnimation { isSelectionMode = false; selectedIDs.removeAll() }
+        } else {
+            vm.emptyTrash()
+        }
+    }
+
+    private func executeRestoreAction() {
+        if isSelectionMode {
+            batchRestore()
+            withAnimation { isSelectionMode = false; selectedIDs.removeAll() }
+        } else {
+            // Restore all items
+            for item in vm.items {
+                vm.restoreItem(item)
+            }
+        }
+    }
+
+    // MARK: - Toast
+
     private func showToast(_ message: String) {
         withAnimation(.easeInOut(duration: 0.2)) { actionToast = message }
         DispatchQueue.main.asyncAfter(deadline: .now() + 1.8) {
@@ -174,6 +278,8 @@ struct TrashView: View {
             .transition(.move(edge: .top).combined(with: .opacity))
             .allowsHitTesting(false)
     }
+
+    // MARK: - Stats
 
     private var statsHeader: some View {
         HStack(spacing: 0) {
@@ -207,43 +313,33 @@ struct TrashView: View {
                 }
             }
         } label: {
-            autoDeleteLabelView
-        }
-    }
-
-    private var autoDeleteLabelView: some View {
-        VStack(spacing: 4) {
-            HStack(spacing: 4) {
-                Image(systemName: "timer")
-                    .font(.system(size: 11))
-                    .foregroundColor(.red)
-                Text(autoDeleteShortLabel)
-                    .font(.system(size: 13, weight: .bold))
-                    .foregroundColor(.white)
-                Image(systemName: "chevron.up.chevron.down")
-                    .font(.system(size: 9))
-                    .foregroundColor(.white.opacity(0.4))
+            VStack(spacing: 4) {
+                HStack(spacing: 4) {
+                    Image(systemName: "timer").font(.system(size: 11)).foregroundColor(.red)
+                    Text(autoDeleteShortLabel)
+                        .font(.system(size: 13, weight: .bold))
+                        .foregroundColor(.white)
+                    Image(systemName: "chevron.up.chevron.down")
+                        .font(.system(size: 9))
+                        .foregroundColor(.white.opacity(0.4))
+                }
+                Text("Auto-delete")
+                    .font(.system(size: 10, weight: .medium))
+                    .foregroundColor(.white.opacity(0.55))
             }
-            Text("Auto-delete")
-                .font(.system(size: 10, weight: .medium))
-                .foregroundColor(.white.opacity(0.55))
+            .frame(maxWidth: .infinity)
+            .contentShape(Rectangle())
         }
-        .padding(8)
-        .contentShape(Rectangle())
     }
 
     private var divider: some View {
-        Rectangle()
-            .fill(Color.white.opacity(0.08))
-            .frame(width: 1, height: 28)
+        Rectangle().fill(Color.white.opacity(0.08)).frame(width: 1, height: 28)
     }
 
     private func statItem(icon: String, value: String, label: String) -> some View {
         VStack(spacing: 4) {
             HStack(spacing: 4) {
-                Image(systemName: icon)
-                    .font(.system(size: 11))
-                    .foregroundColor(.red)
+                Image(systemName: icon).font(.system(size: 11)).foregroundColor(.red)
                 Text(value)
                     .font(.system(size: 14, weight: .bold).monospacedDigit())
                     .foregroundColor(.white)
@@ -252,7 +348,7 @@ struct TrashView: View {
                 .font(.system(size: 10, weight: .medium))
                 .foregroundColor(.white.opacity(0.55))
         }
-        .frame(maxWidth: .infinity)
+        .frame(maxWidth: .infinity, alignment: .center)
     }
 
     private var formattedTotalSize: String {
@@ -268,13 +364,11 @@ struct TrashView: View {
         return "Now"
     }
 
-    private var contentView: some View {
-        ScrollView {
-            VStack(alignment: .leading, spacing: 18) {
-                statsHeader.padding(.top, 4)
+    // MARK: - Content
 
-                let grouped = groupByMonth()
-                ForEach(grouped.keys.sorted(by: >), id: \.self) { monthKey in
+    private var itemsContent: some View {
+        let grouped = groupByMonth()
+        return ForEach(grouped.keys.sorted(by: >), id: \.self) { monthKey in
                     VStack(alignment: .leading, spacing: 10) {
                         HStack {
                             Text(monthKey.uppercased())
@@ -297,9 +391,6 @@ struct TrashView: View {
                         .padding(.horizontal, 16)
                     }
                 }
-            }
-            .padding(.bottom, isSelectionMode ? 120 : 100)
-        }
     }
 
     private func trashCard(_ item: TrashItem) -> some View {
@@ -307,14 +398,11 @@ struct TrashView: View {
         return VStack(alignment: .leading, spacing: 6) {
             ZStack(alignment: .topTrailing) {
                 thumbnailView(for: item)
-                    .frame(maxWidth: .infinity)
-                    .frame(height: 110)
+                    .frame(maxWidth: .infinity).frame(height: 110)
                     .clipShape(RoundedRectangle(cornerRadius: 10))
                     .contentShape(Rectangle())
                     .onTapGesture {
-                        if isSelectionMode {
-                            toggleSelection(item)
-                        }
+                        if isSelectionMode { toggleSelection(item) }
                     }
                     .onLongPressGesture {
                         if !isSelectionMode {
@@ -350,10 +438,7 @@ struct TrashView: View {
                 }
 
                 VStack {
-                    HStack(alignment: .top) {
-                        topLeftBadge(item)
-                        Spacer()
-                    }
+                    HStack(alignment: .top) { topLeftBadge(item); Spacer() }
                     Spacer()
                 }
                 .padding(6)
@@ -363,14 +448,7 @@ struct TrashView: View {
                     HStack(alignment: .bottom) {
                         bottomLeftBadge(item)
                         Spacer()
-                        if item.isVideo {
-                            Text(item.formattedDuration)
-                                .font(.system(size: 10, design: .monospaced).weight(.bold))
-                                .foregroundColor(.white)
-                                .padding(.horizontal, 5).padding(.vertical, 2)
-                                .background(Color.black.opacity(0.65))
-                                .clipShape(RoundedRectangle(cornerRadius: 3))
-                        }
+                        if item.isVideo { durationBadge(item) }
                     }
                 }
                 .padding(6)
@@ -397,9 +475,7 @@ struct TrashView: View {
                 }
                 .foregroundColor(timeRemainingColor(for: item))
                 Spacer()
-                if !isSelectionMode {
-                    menuButton(for: item)
-                }
+                if !isSelectionMode { menuButton(for: item) }
             }
         }
         .padding(8)
@@ -409,6 +485,15 @@ struct TrashView: View {
             RoundedRectangle(cornerRadius: 12)
                 .stroke(isSelected ? Color.red : Color.white.opacity(0.08), lineWidth: isSelected ? 2 : 1)
         )
+    }
+
+    private func durationBadge(_ item: TrashItem) -> some View {
+        Text(item.formattedDuration)
+            .font(.system(size: 10, design: .monospaced).weight(.bold))
+            .foregroundColor(.white)
+            .padding(.horizontal, 5).padding(.vertical, 2)
+            .background(Color.black.opacity(0.65))
+            .clipShape(RoundedRectangle(cornerRadius: 3))
     }
 
     private func toggleSelection(_ item: TrashItem) {
@@ -493,8 +578,7 @@ struct TrashView: View {
         return HStack(spacing: 3) {
             Image(systemName: item.isVideo ? "video.fill" : "camera.fill")
                 .font(.system(size: 9))
-            Text(label)
-                .font(.system(size: 8, weight: .heavy))
+            Text(label).font(.system(size: 8, weight: .heavy))
         }
         .foregroundColor(.white)
         .padding(.horizontal, 5).padding(.vertical, 2)
@@ -506,8 +590,7 @@ struct TrashView: View {
         HStack(spacing: 3) {
             Image(systemName: item.cameraPosition == "Front" ? "person.crop.square" : "camera")
                 .font(.system(size: 9))
-            Text(item.cameraPosition)
-                .font(.system(size: 8, weight: .bold))
+            Text(item.cameraPosition).font(.system(size: 8, weight: .bold))
         }
         .foregroundColor(.white)
         .padding(.horizontal, 5).padding(.vertical, 2)
@@ -522,9 +605,9 @@ struct TrashView: View {
         return AsyncThumbnailView(url: trashURL, isVideo: item.isVideo)
     }
 
-    private var emptyState: some View {
+    private var emptyStateContent: some View {
         VStack(spacing: 12) {
-            Spacer()
+            Spacer().frame(height: 60)
             Image(systemName: "trash.slash")
                 .font(.system(size: 48))
                 .foregroundColor(.gray)
@@ -536,7 +619,6 @@ struct TrashView: View {
                 .foregroundColor(.secondary)
                 .multilineTextAlignment(.center)
                 .padding(.horizontal, 40)
-            Spacer()
         }
         .frame(maxWidth: .infinity)
     }
@@ -556,9 +638,7 @@ private struct AsyncThumbnailView: View {
     var body: some View {
         Group {
             if let t = thumbnail {
-                Image(uiImage: t)
-                    .resizable()
-                    .aspectRatio(contentMode: .fill)
+                Image(uiImage: t).resizable().aspectRatio(contentMode: .fill)
             } else {
                 Rectangle()
                     .fill(Color.gray.opacity(0.3))

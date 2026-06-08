@@ -9,15 +9,23 @@ import SwiftUI
 
 @main
 struct FadCamApp: App {
-    @AppStorage("hasCompletedOnboarding") private var hasCompletedOnboarding = false
+    @State private var showOnboarding: Bool
+
+    init() {
+        let completed = UserDefaults.standard.bool(forKey: "hasCompletedOnboarding")
+        _showOnboarding = State(initialValue: !completed)
+    }
 
     var body: some Scene {
         WindowGroup {
-            if hasCompletedOnboarding {
-                ContentView()
-                    .preferredColorScheme(.dark)
+            if showOnboarding {
+                OnboardingView {
+                    UserDefaults.standard.set(true, forKey: "hasCompletedOnboarding")
+                    showOnboarding = false
+                }
+                .preferredColorScheme(.dark)
             } else {
-                OnboardingView()
+                ContentView()
                     .preferredColorScheme(.dark)
             }
         }

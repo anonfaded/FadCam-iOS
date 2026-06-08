@@ -83,6 +83,7 @@ final class TrashViewModel: ObservableObject {
 
         ThumbnailService.shared.invalidateCache(for: recording.url)
         loadItems()
+        NotificationCenter.default.post(name: .fadCamMediaChanged, object: nil)
     }
 
     func restoreItem(_ item: TrashItem) {
@@ -105,6 +106,7 @@ final class TrashViewModel: ObservableObject {
         current.removeAll { $0.id == item.id }
         saveItems(current)
         loadItems()
+        postChange()
     }
 
     func permanentlyDelete(_ item: TrashItem) {
@@ -116,6 +118,7 @@ final class TrashViewModel: ObservableObject {
         current.removeAll { $0.id == item.id }
         saveItems(current)
         loadItems()
+        postChange()
     }
 
     func emptyTrash() {
@@ -126,6 +129,7 @@ final class TrashViewModel: ObservableObject {
         }
         saveItems([])
         loadItems()
+        postChange()
     }
 
     func autoCleanup() {
@@ -165,5 +169,9 @@ final class TrashViewModel: ObservableObject {
         if let data = try? JSONEncoder().encode(items) {
             try? data.write(to: trashMetadataURL)
         }
+    }
+
+    private func postChange() {
+        NotificationCenter.default.post(name: .fadCamMediaChanged, object: nil)
     }
 }

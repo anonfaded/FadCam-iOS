@@ -30,6 +30,16 @@ final class RecordsViewModel: ObservableObject {
     init() {
         loadViewedSet()
         checkPhotosPermission()
+        NotificationCenter.default.addObserver(
+            forName: .fadCamMediaChanged,
+            object: nil,
+            queue: .main
+        ) { [weak self] _ in
+            guard let self else { return }
+            Task { @MainActor in
+                self.loadRecordings()
+            }
+        }
     }
 
     private func loadViewedSet() {

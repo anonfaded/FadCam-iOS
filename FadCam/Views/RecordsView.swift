@@ -217,8 +217,9 @@ struct RecordsView: View {
         switch confirmAlertType {
         case .delete:
             if isSelectionMode {
+                let count = selectedIDs.count
                 batchDelete()
-                showToast("Moved \(selectedIDs.count) files to trash")
+                showToast("Moved \(count) files to trash")
             } else if let rec = recordingPendingAction {
                 viewModel.deleteRecording(rec)
                 showToast("Moved to trash")
@@ -964,9 +965,8 @@ struct RecordingCard: View {
             Text(recording.filename)
                 .font(.system(size: 11, weight: .medium))
                 .foregroundColor(.white)
-                .lineLimit(3)
+                .lineLimit(2)
                 .multilineTextAlignment(.leading)
-                .fixedSize(horizontal: false, vertical: true)
                 .frame(maxWidth: .infinity, alignment: .leading)
 
             sizeRow
@@ -985,6 +985,7 @@ struct RecordingCard: View {
         .padding(8)
         .background(Color.white.opacity(0.04))
         .clipShape(RoundedRectangle(cornerRadius: 12))
+        .clipped()
         .overlay(
             RoundedRectangle(cornerRadius: 12)
                 .stroke(isSelected ? Color.red : Color.white.opacity(0.08), lineWidth: isSelected ? 2 : 1)

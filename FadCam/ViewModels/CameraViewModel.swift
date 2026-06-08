@@ -86,6 +86,16 @@ final class CameraViewModel: NSObject, ObservableObject {
         super.init()
         startStorageRefreshTimer()
         refreshStorage()
+        NotificationCenter.default.addObserver(
+            forName: .fadCamMediaChanged,
+            object: nil,
+            queue: .main
+        ) { [weak self] _ in
+            guard let self else { return }
+            Task { @MainActor in
+                self.refreshStorage()
+            }
+        }
     }
 
     deinit {
@@ -209,6 +219,7 @@ final class CameraViewModel: NSObject, ObservableObject {
                         self.cameraService.saveToPhotos(url: url)
                     }
                     self.refreshStorage()
+                    NotificationCenter.default.post(name: .fadCamMediaChanged, object: nil)
                 case .failure(let error):
                     self.errorMessage = error.localizedDescription
                 }
@@ -288,6 +299,7 @@ final class CameraViewModel: NSObject, ObservableObject {
                         self.cameraService.saveToPhotos(url: savedURL)
                     }
                     self.refreshStorage()
+                    NotificationCenter.default.post(name: .fadCamMediaChanged, object: nil)
                 case .failure(let error):
                     self.recordingState = .error(error.localizedDescription)
                     self.errorMessage = error.localizedDescription

@@ -4,6 +4,7 @@ import Photos
 struct SettingsView: View {
     @AppStorage("saveToPhotos") private var saveToPhotos = false
     @AppStorage("resumeOnboarding") private var resumeOnboarding = false
+    @AppStorage("hasCompletedOnboarding") private var hasCompletedOnboarding = true
     @State private var showingAlert = false
     @State private var alertMessage = ""
     @State private var showGitHubLink = false
@@ -28,6 +29,7 @@ struct SettingsView: View {
                     }
                     .onChange(of: resumeOnboarding) { newValue in
                         if newValue {
+                            hasCompletedOnboarding = false
                             DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) {
                                 resumeOnboarding = false
                             }
