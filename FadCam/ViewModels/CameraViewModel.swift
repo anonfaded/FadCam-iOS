@@ -15,7 +15,12 @@ final class CameraViewModel: NSObject, ObservableObject {
     @Published var errorMessage: String?
     @Published var isPreviewActive = false
     @Published var isBatterySaverActive = false
-    @Published var currentCamera: AVCaptureDevice.Position = .back
+    @Published var currentCamera: AVCaptureDevice.Position = .back {
+        didSet {
+            UserDefaults.standard.set(currentCamera == .back ? "back" : "front",
+                                      forKey: "fadcam_selected_camera")
+        }
+    }
     @Published var isFrontFlipped = false
     @Published var isTorchOn = false
     @Published var zoomFactor: CGFloat = 1.0
@@ -28,6 +33,26 @@ final class CameraViewModel: NSObject, ObservableObject {
     private var timerCancellable: AnyCancellable?
     private var storageRefreshTimer: AnyCancellable?
     private var previewAutoStarted = false
+
+    override init() {
+        super.init()
+        // Restore saved camera preference
+        if let saved = UserDefaults.standard.string(forKey: "fadcam_selected_camera") {
+            currentCamera = (saved == "front") ? .front : .back
+        }
+        startStorageRefreshTimer()
+        refreshStorage()
+        NotificationCenter.default.addObserver(
+            forName: .fadCamMediaChanged,
+            object: nil,
+            queue: .main
+        ) { [weak self] _ in
+            guard let self else { return }
+            Task { @MainActor in
+                self.refreshStorage()
+            }
+        }
+    }
 
     var recordingURL: URL {
         let documents = FileManager.default.urls(for: .documentDirectory, in: .userDomainMask)[0]
@@ -82,22 +107,6 @@ final class CameraViewModel: NSObject, ObservableObject {
         let secs = totalSec % 60
         if hours >= 1 { return "\(hours)h \(mins)m \(secs)s" }
         return "\(mins)m \(secs)s"
-    }
-
-    override init() {
-        super.init()
-        startStorageRefreshTimer()
-        refreshStorage()
-        NotificationCenter.default.addObserver(
-            forName: .fadCamMediaChanged,
-            object: nil,
-            queue: .main
-        ) { [weak self] _ in
-            guard let self else { return }
-            Task { @MainActor in
-                self.refreshStorage()
-            }
-        }
     }
 
     deinit {

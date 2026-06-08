@@ -8,12 +8,34 @@ struct HomeView: View {
     @State private var lastZoomValue: CGFloat = 1.0
     @State private var selectedTopTab: TopTab = .fadCam
 
-    // Sleeping avatar animations
+    // Sleeping avatar animations (matching Android AVD flow)
     @State private var breathingOpacity: Double = 0.80
     @State private var breathingScale: Double = 1.0
     @State private var z1Float: CGFloat = 0
     @State private var z2Float: CGFloat = 0
     @State private var z3Float: CGFloat = 0
+    /// Eye vertical offset: 2 = sleeping, -8 = awake (eyes rise UP during wake)
+    @State private var eyeOffsetY: Double = 2
+    /// Eye brightness: 0 = dark #2a2a2a, 1 = white #ffffff
+    @State private var eyeBrightness: Double = 0
+    /// Glow opacity: 0 = hidden, 1 = full neon bloom
+    @State private var eyeGlowOpacity: Double = 0
+    /// Avatar scale during transitions
+    @State private var avatarScale: Double = 1.0
+    /// Avatar opacity during transitions
+    @State private var avatarOpacity: Double = 1.0
+    /// Iris reveal: 0 = closed, 1 = fully open
+    @State private var irisProgress: CGFloat = 0
+    /// Whether camera preview is active
+    @State private var showCameraPreview = false
+    /// Blocks re-entrant taps during animation
+    @State private var isTransitioning = false
+    /// Size of the preview area for iris calculations
+    @State private var previewSize: CGSize = .zero
+    /// True when preview was auto-opened by recording start (auto-close on stop)
+    @State private var previewAutoOpened = false
+    /// Suppresses onChange(isPreviewActive) handler during internal toggle
+    @State private var isInternalToggle = false
 
     enum TopTab: String, CaseIterable, Identifiable {
         case fadCam = "FadCam", fadRec = "FadRec", fadMic = "FadMic"
@@ -295,11 +317,27 @@ struct HomeView: View {
 
     private var previewArea: some View {
         ZStack {
-            if cameraVM.isPreviewActive {
-                CameraPreview(session: cameraVM.cameraService.session,
-                              isMirrored: cameraVM.currentCamera == .front && !cameraVM.isFrontFlipped)
-                    .scaleEffect(cameraVM.zoomFactor)
-                Color.black.opacity(0.001)
+            // Camera preview — always present during preview, masked by iris
+            if showCameraPreview {
+                ZStack {
+                    CameraPreview(session: cameraVM.cameraService.session,
+                                  isMirrored: cameraVM.currentCamera == .front && !cameraVM.isFrontFlipped)
+                        .scaleEffect(cameraVM.zoomFactor)
+
+                    // Dark vignette overlay — ambient dim edges, no solid pillarbox
+                    RadialGradient(
+                        colors: [.clear, .clear, .clear, Color.black.opacity(0.35)],
+                        center: .center,
+                        startRadius: 30,
+                        endRadius: max(100, max(previewSize.width, previewSize.height))
+                    )
+                    .allowsHitTesting(false)
+                }
+                .background(GeometryReader { geo in
+                    Color.clear.onAppear { previewSize = geo.size }
+                        .onChange(of: geo.size) { previewSize = $0 }
+                })
+                .mask(irisMask)
 
                 if cameraVM.recordingState == .recording {
                     VStack {
@@ -337,10 +375,7 @@ struct HomeView: View {
                                 }
                             }
                             HStack(spacing: 6) {
-                                previewActionButton(
-                                    icon: cameraVM.isBatterySaverActive ? "moon.fill" : "moon",
-                                    label: "Saver"
-                                ) {
+                                previewActionButton(icon: cameraVM.isBatterySaverActive ? "moon.fill" : "moon", label: "Saver") {
                                     cameraVM.toggleBatterySaver()
                                 }
                                 .opacity(cameraVM.recordingState == .recording ? 1 : 0.4)
@@ -348,15 +383,20 @@ struct HomeView: View {
                                 previewActionButton(icon: "camera.fill", label: "FadShot") {
                                     cameraVM.capturePhoto()
                                 }
-                                    .opacity(cameraVM.isPreviewActive ? 1 : 0.4)
-                                    .disabled(!cameraVM.isPreviewActive)
+                                .opacity(showCameraPreview ? 1 : 0.4)
+                                .disabled(!showCameraPreview)
                             }
                         }
                     }
                     .padding(.horizontal, 10).padding(.bottom, 8)
                 }
-            } else {
+            }
+
+            // Mascot — visible during sleep AND during iris transitions
+            if !showCameraPreview || avatarOpacity > 0.001 {
                 mascotView
+                    .opacity(avatarOpacity)
+                    .scaleEffect(avatarScale)
             }
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
@@ -366,13 +406,142 @@ struct HomeView: View {
         .padding(.horizontal, 14)
         .contentShape(Rectangle())
         .onLongPressGesture(minimumDuration: 0.5) {
+            guard !isTransitioning else { return }
             UIImpactFeedbackGenerator(style: .medium).impactOccurred()
-            if cameraVM.recordingState == .recording {
-                cameraVM.toggleBatterySaver()
-            } else {
-                cameraVM.togglePreview()
+            previewAutoOpened = false
+            handlePreviewToggle()
+        }
+        .onChange(of: cameraVM.recordingState) { newState in
+            if newState == .recording && !showCameraPreview && !isTransitioning {
+                previewAutoOpened = true
+                handlePreviewToggle()
             }
         }
+        // Handle EXTERNAL isPreviewActive changes (recording stop, background, etc.)
+        .onChange(of: cameraVM.isPreviewActive) { active in
+            guard !isInternalToggle else { return }
+            if !active && showCameraPreview {
+                isTransitioning = false
+                showCameraPreview = false
+                irisProgress = 0
+                avatarOpacity = 1.0
+                avatarScale = 1.0
+                setAwakeState()
+                DispatchQueue.main.asyncAfter(deadline: .now() + 0.65) {
+                    withAnimation(.easeInOut(duration: 0.42)) {
+                        setSleepState()
+                    }
+                    startBreathingAnimation()
+                    startFloatingZAnimations()
+                }
+            }
+        }
+    }
+
+    /// Circular iris mask centered on preview area. irisProgress: 0=closed, 1=open.
+    @ViewBuilder
+    private var irisMask: some View {
+        if previewSize.width > 0 {
+            let maxR = hypot(previewSize.width, previewSize.height) / 2
+            let r = max(0.1, maxR * irisProgress)
+            Circle()
+                .frame(width: r * 2, height: r * 2)
+                .position(x: previewSize.width / 2, y: previewSize.height / 2)
+        }
+    }
+
+    // MARK: - Preview Toggle (Wake / Sleep animation sequence)
+
+    private func handlePreviewToggle() {
+        isInternalToggle = true
+        isTransitioning = true
+        if showCameraPreview {
+            // ═══ Preview → Avatar (sleep) ══════════════════════════════
+            setAwakeState()
+            avatarOpacity = 0
+            irisProgress = 1
+            withAnimation(.easeIn(duration: 0.48)) {
+                irisProgress = 0
+            }
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.48) {
+                showCameraPreview = false
+                // Directly stop camera — avoids onChange(isPreviewActive) loop
+                if cameraVM.isPreviewActive && cameraVM.recordingState != .recording {
+                    cameraVM.isPreviewActive = false
+                    cameraVM.stopSession()
+                }
+                avatarOpacity = 1.0
+                avatarScale = 1.0
+                DispatchQueue.main.asyncAfter(deadline: .now() + 0.65) {
+                    guard isTransitioning else { return }
+                    withAnimation(.easeInOut(duration: 0.42)) {
+                        setSleepState()
+                    }
+                    startBreathingAnimation()
+                    startFloatingZAnimations()
+                    isTransitioning = false
+                    isInternalToggle = false
+                }
+            }
+        } else {
+            // ═══ Avatar → Preview (wake) ═══════════════════════════════
+            // Directly start camera — bypass togglePreview to avoid loop
+            if !cameraVM.isPreviewActive {
+                cameraVM.isPreviewActive = true
+                cameraVM.startSession()
+            }
+            showCameraPreview = true
+            irisProgress = 0
+
+            stopBreathing()
+            stopFloatingZ()
+            withAnimation(.easeOut(duration: 0.42)) {
+                setAwakeState()
+            }
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.42) {
+                guard isTransitioning else { return }
+                withAnimation(.easeIn(duration: 0.28)) {
+                    avatarOpacity = 0
+                    avatarScale = 0.72
+                }
+            }
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.42 + 0.28) {
+                guard isTransitioning else { return }
+                withAnimation(.easeOut(duration: 0.48)) {
+                    irisProgress = 1
+                }
+                DispatchQueue.main.asyncAfter(deadline: .now() + 0.48) {
+                    isTransitioning = false
+                    isInternalToggle = false
+                }
+            }
+        }
+    }
+
+    private func setAwakeState() {
+        eyeOffsetY = -8
+        eyeBrightness = 1
+        eyeGlowOpacity = 1
+        breathingOpacity = 1.0
+        breathingScale = 1.0
+        z1Float = 0; z2Float = 0; z3Float = 0
+    }
+
+    private func setSleepState() {
+        eyeOffsetY = 2
+        eyeBrightness = 0
+        eyeGlowOpacity = 0
+    }
+
+    private func stopBreathing() {
+        withAnimation(.easeOut(duration: 0.1)) {
+            breathingOpacity = 1.0
+            breathingScale = 1.0
+        }
+    }
+
+    private func stopFloatingZ() {
+        z1Float = 0; z2Float = 0; z3Float = 0
     }
 
     private var mascotView: some View {
@@ -386,7 +555,8 @@ struct HomeView: View {
             sleepingMoon
                 .overlay(alignment: .topTrailing) {
                     zzzBadge
-                        .offset(x: 6, y: -10)
+                        .offset(x: 8, y: -2)
+                        .opacity(1.0 - eyeGlowOpacity)
                 }
 
             VStack {
@@ -397,13 +567,24 @@ struct HomeView: View {
                     .foregroundColor(.red)
                     .padding(.bottom, 8)
 
-                // FadShot + Full buttons at bottom-right (dimmed when preview off)
+                // Buttons — active when recording even if preview is off
                 HStack {
                     Spacer()
                     HStack(spacing: 6) {
-                        previewActionButton(icon: "camera.fill", label: "FadShot") { }
-                            .opacity(0.4)
-                            .disabled(true)
+                        let isRecording = cameraVM.recordingState == .recording
+                        previewActionButton(
+                            icon: cameraVM.isBatterySaverActive ? "moon.fill" : "moon",
+                            label: "Saver"
+                        ) {
+                            cameraVM.toggleBatterySaver()
+                        }
+                        .opacity(isRecording ? 1 : 0.4)
+                        .disabled(!isRecording)
+                        previewActionButton(icon: "camera.fill", label: "FadShot") {
+                            cameraVM.capturePhoto()
+                        }
+                        .opacity(isRecording ? 1 : 0.4)
+                        .disabled(!isRecording)
                     }
                 }
                 .padding(.horizontal, 10).padding(.bottom, 8)
@@ -435,10 +616,16 @@ struct HomeView: View {
     }
 
     private var crescentMoon: some View {
-        ZStack {
-            Circle().fill(Color.white.opacity(0.15)).frame(width: 44, height: 44)
-            Circle().fill(Color(red: 0.04, green: 0.03, blue: 0.06)).frame(width: 36, height: 36).offset(x: 12, y: -3)
-        }
+        Circle()
+            .fill(Color.white.opacity(0.15))
+            .frame(width: 44, height: 44)
+            .overlay(
+                Circle()
+                    .frame(width: 36, height: 36)
+                    .offset(x: 12, y: -3)
+                    .blendMode(.destinationOut)
+            )
+            .compositingGroup()
     }
 
     private var sparkles: some View {
@@ -474,40 +661,72 @@ struct HomeView: View {
                 .opacity(breathingOpacity)
                 .scaleEffect(breathingScale)
 
-            // Left sleepy eye — semicircle
-            Path { path in
-                path.addArc(
-                    center: CGPoint(x: 11, y: 0),
-                    radius: 11,
-                    startAngle: .degrees(0),
-                    endAngle: .degrees(180),
-                    clockwise: false
-                )
-                path.closeSubpath()
+            // Left eye + soft glow
+            ZStack {
+                // Neon bloom: blurred white circle behind the eye
+                Circle()
+                    .fill(Color.white.opacity(0.25 * eyeGlowOpacity))
+                    .frame(width: 20, height: 20)
+                    .blur(radius: 6 * eyeGlowOpacity)
+                // Softer outer bloom
+                Circle()
+                    .fill(Color.white.opacity(0.12 * eyeGlowOpacity))
+                    .frame(width: 28, height: 28)
+                    .blur(radius: 10 * eyeGlowOpacity)
+                // The eye itself
+                leftEye
             }
-            .fill(Color(red: 0.10, green: 0.10, blue: 0.10))
-            .frame(width: 22, height: 11)
-            .offset(x: -19, y: 2)
+            .offset(x: -19, y: eyeOffsetY)
 
-            // Right sleepy eye — semicircle
-            Path { path in
-                path.addArc(
-                    center: CGPoint(x: 11, y: 0),
-                    radius: 11,
-                    startAngle: .degrees(0),
-                    endAngle: .degrees(180),
-                    clockwise: false
-                )
-                path.closeSubpath()
+            // Right eye + soft glow
+            ZStack {
+                Circle()
+                    .fill(Color.white.opacity(0.25 * eyeGlowOpacity))
+                    .frame(width: 20, height: 20)
+                    .blur(radius: 6 * eyeGlowOpacity)
+                Circle()
+                    .fill(Color.white.opacity(0.12 * eyeGlowOpacity))
+                    .frame(width: 28, height: 28)
+                    .blur(radius: 10 * eyeGlowOpacity)
+                rightEye
             }
-            .fill(Color(red: 0.10, green: 0.10, blue: 0.10))
-            .frame(width: 22, height: 11)
-            .offset(x: 19, y: 2)
+            .offset(x: 19, y: eyeOffsetY)
         }
         .onAppear {
-            startBreathingAnimation()
-            startFloatingZAnimations()
+            if eyeOffsetY > -2 {
+                startBreathingAnimation()
+                startFloatingZAnimations()
+            }
         }
+    }
+
+    // MARK: - Eye Components
+
+    private var leftEye: some View {
+        Path { path in
+            path.addArc(center: CGPoint(x: 11, y: 0), radius: 11,
+                        startAngle: .degrees(0), endAngle: .degrees(180), clockwise: false)
+            path.closeSubpath()
+        }
+        .fill(eyeFillColor)
+        .frame(width: 22, height: 11)
+    }
+
+    private var rightEye: some View {
+        Path { path in
+            path.addArc(center: CGPoint(x: 11, y: 0), radius: 11,
+                        startAngle: .degrees(0), endAngle: .degrees(180), clockwise: false)
+            path.closeSubpath()
+        }
+        .fill(eyeFillColor)
+        .frame(width: 22, height: 11)
+    }
+
+    /// Interpolated: #2a2a2a (sleep) → #ffffff (awake)
+    private var eyeFillColor: Color {
+        Color(red: 0.165 + 0.835 * eyeBrightness,
+              green: 0.165 + 0.835 * eyeBrightness,
+              blue: 0.165 + 0.835 * eyeBrightness)
     }
 
     // zZz floating text — positioned at top-right of avatar, separate from the head

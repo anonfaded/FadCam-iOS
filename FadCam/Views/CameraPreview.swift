@@ -10,6 +10,18 @@ class PreviewView: UIView {
     var videoPreviewLayer: AVCaptureVideoPreviewLayer {
         layer as! AVCaptureVideoPreviewLayer
     }
+
+    override init(frame: CGRect) {
+        super.init(frame: frame)
+        self.backgroundColor = .black
+        self.clipsToBounds = true
+    }
+
+    required init?(coder: NSCoder) {
+        super.init(coder: coder)
+        self.backgroundColor = .black
+        self.clipsToBounds = true
+    }
 }
 
 struct CameraPreview: UIViewRepresentable {
