@@ -87,9 +87,18 @@ struct SettingsView: View {
                         if let logo = UIImage(named: "HeaderLogo") {
                             Image(uiImage: logo).resizable().aspectRatio(contentMode: .fit).frame(height: 24).opacity(0.5)
                         }
-                        Text("Made with love by FadSec Lab, Pakistan")
+                        Button {
+                            if let url = URL(string: "https://fadcam.fadseclab.com") {
+                                UIApplication.shared.open(url)
+                            }
+                        } label: {
+                            Text(verbatim: "https://fadcam.fadseclab.com")
+                                .font(.footnote)
+                                .foregroundColor(.red.opacity(0.7))
+                        }
+                        Text("Made with \u{2764}\u{FE0F} by FadSec Lab in \u{1F1F5}\u{1F1F0}")
                             .font(.footnote).foregroundColor(.secondary)
-                        Text("Licensed under GPLv3")
+                        Text("\u{00A9} 2024\u{2013}2026  \u{2022}  GPLv3 License")
                             .font(.caption2).foregroundColor(.secondary).opacity(0.7)
                     }
                     .frame(maxWidth: .infinity).padding(.vertical, 12)

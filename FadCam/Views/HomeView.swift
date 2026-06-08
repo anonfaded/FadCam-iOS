@@ -1,12 +1,54 @@
 import SwiftUI
 import AVFoundation
 
+// MARK: - Custom 2-Line Hamburger Icon
+
+struct HamburgerLines: Shape {
+    func path(in rect: CGRect) -> Path {
+        var path = Path()
+        let w = rect.width
+        let h = rect.height
+        let lineH: CGFloat = 2
+        let spacing: CGFloat = 5
+        // Top line — full width
+        path.addRoundedRect(in: CGRect(x: 0, y: (h - lineH * 2 - spacing) / 2, width: w, height: lineH), cornerSize: CGSize(width: 1, height: 1))
+        // Bottom line — 60% width, left-aligned (space on the right)
+        let bottomW = w * 0.6
+        path.addRoundedRect(in: CGRect(x: 0, y: (h - lineH * 2 - spacing) / 2 + lineH + spacing, width: bottomW, height: lineH), cornerSize: CGSize(width: 1, height: 1))
+        return path
+    }
+}
+
+/// A rectangle with rounded corners only on the right (trailing) side.
+struct RightRoundedRectangle: Shape {
+    let radius: CGFloat
+    func path(in rect: CGRect) -> Path {
+        var path = Path()
+        let r = min(radius, min(rect.width, rect.height) / 2)
+        path.move(to: CGPoint(x: 0, y: 0))
+        path.addLine(to: CGPoint(x: rect.width - r, y: 0))
+        path.addQuadCurve(to: CGPoint(x: rect.width, y: r), control: CGPoint(x: rect.width, y: 0))
+        path.addLine(to: CGPoint(x: rect.width, y: rect.height - r))
+        path.addQuadCurve(to: CGPoint(x: rect.width - r, y: rect.height), control: CGPoint(x: rect.width, y: rect.height))
+        path.addLine(to: CGPoint(x: 0, y: rect.height))
+        path.closeSubpath()
+        return path
+    }
+}
+
 struct HomeView: View {
     @ObservedObject var cameraVM: CameraViewModel
     @Binding var selectedTab: Int
     @Environment(\.scenePhase) var scenePhase
     @State private var lastZoomValue: CGFloat = 1.0
     @State private var selectedTopTab: TopTab = .fadCam
+
+    // Drawer
+    @State private var showDrawer = false
+    @State private var drawerDragOffset: CGFloat = 0
+    @State private var showDiscordLink = false
+    @State private var showWebsiteLink = false
+    @AppStorage("previewAreaEnabled") private var previewAreaEnabled = true
 
     // Sleeping avatar animations (matching Android AVD flow)
     @State private var breathingOpacity: Double = 0.80
@@ -95,6 +137,157 @@ struct HomeView: View {
         } message: {
             Text(cameraVM.errorMessage ?? "")
         }
+        .overlay {
+            if showDrawer {
+                drawerOverlay
+                    .transition(.move(edge: .leading))
+            }
+        }
+        .animation(.spring(response: 0.35, dampingFraction: 0.8), value: showDrawer)
+        .sheet(isPresented: $showDiscordLink) {
+            LinkPreviewView(
+                url: URL(string: "https://discord.gg/kvAZvdkuuN")!,
+                title: "FadCam Discord"
+            )
+        }
+        .sheet(isPresented: $showWebsiteLink) {
+            LinkPreviewView(
+                url: URL(string: "https://fadcam.fadseclab.com")!,
+                title: "FadCam Website"
+            )
+        }
+    }
+
+    // MARK: - Drawer
+
+    private var drawerOverlay: some View {
+        ZStack(alignment: .leading) {
+            Color.black.opacity(showDrawer ? 0.4 : 0)
+                .ignoresSafeArea()
+                .onTapGesture { dismissDrawer() }
+
+            VStack(alignment: .leading, spacing: 0) {
+                HStack(spacing: 12) {
+                    Button { dismissDrawer() } label: {
+                        Image(systemName: "chevron.left")
+                            .font(.system(size: 16, weight: .medium))
+                            .foregroundColor(.white.opacity(0.7))
+                            .frame(width: 30, height: 30)
+                    }
+                    Text("Home Options")
+                        .font(.system(size: 18, weight: .semibold))
+                        .foregroundColor(.white)
+                    Spacer()
+                }
+                .padding(.horizontal, 20)
+                .padding(.top, 54)
+                .padding(.bottom, 20)
+
+                VStack(alignment: .leading, spacing: 0) {
+                    Text("PREVIEW")
+                        .font(.system(size: 13, weight: .regular))
+                        .foregroundColor(.white.opacity(0.5))
+                        .padding(.horizontal, 20)
+                        .padding(.bottom, 8)
+
+                    HStack {
+                        Label("Preview Area", systemImage: "eye.fill")
+                            .font(.system(size: 16))
+                            .foregroundColor(.white)
+                        Spacer()
+                        Toggle("", isOn: $previewAreaEnabled)
+                            .labelsHidden()
+                            .tint(.red)
+                    }
+                    .padding(14)
+                    .background(Color.white.opacity(0.05))
+                    .clipShape(RoundedRectangle(cornerRadius: 10))
+                    .padding(.horizontal, 16)
+
+                    Text("When disabled, recording will not auto-open the preview area.")
+                        .font(.system(size: 12))
+                        .foregroundColor(.white.opacity(0.5))
+                        .padding(.horizontal, 20)
+                        .padding(.top, 8)
+                }
+
+                Spacer()
+
+                Divider()
+                    .background(Color.white.opacity(0.08))
+                    .padding(.horizontal, 20)
+
+                Button { showDiscordLink = true } label: {
+                    HStack(spacing: 10) {
+                        Image(systemName: "bubble.left.and.bubble.right")
+                            .font(.system(size: 16))
+                            .foregroundColor(.white.opacity(0.6))
+                        Text("Discord")
+                            .font(.system(size: 14))
+                            .foregroundColor(.white.opacity(0.6))
+                        Spacer()
+                        Image(systemName: "arrow.up.forward")
+                            .font(.system(size: 11))
+                            .foregroundColor(.white.opacity(0.4))
+                    }
+                    .padding(.horizontal, 20)
+                    .padding(.vertical, 13)
+                }
+
+                VStack(spacing: 6) {
+                    Button { showWebsiteLink = true } label: {
+                        Text(verbatim: "https://fadcam.fadseclab.com")
+                            .font(.system(size: 12))
+                            .foregroundColor(.red.opacity(0.7))
+                    }
+                    Text("Made with \u{2764}\u{FE0F} by FadSec Lab in \u{1F1F5}\u{1F1F0}")
+                        .font(.system(size: 11))
+                        .foregroundColor(.white.opacity(0.4))
+                    Text("\u{00A9} 2024\u{2013}2026  \u{2022}  GPLv3 License")
+                        .font(.system(size: 10))
+                        .foregroundColor(.white.opacity(0.3))
+                }
+                .frame(maxWidth: .infinity)
+                .padding(.bottom, 36)
+            }
+            .frame(width: 300)
+            .background(
+                LinearGradient(
+                    colors: [
+                        Color(red: 0.06, green: 0.06, blue: 0.07),
+                        Color(red: 0.02, green: 0.02, blue: 0.03),
+                        Color.black
+                    ],
+                    startPoint: .top,
+                    endPoint: .bottom
+                )
+                .ignoresSafeArea()
+            )
+            .clipShape(RightRoundedRectangle(radius: 24))
+            .offset(x: drawerDragOffset)
+        }
+        .gesture(
+            DragGesture(minimumDistance: 10)
+                .onChanged { val in
+                    drawerDragOffset = min(0, val.translation.width)
+                }
+                .onEnded { val in
+                    if val.predictedEndTranslation.width < -80 {
+                        dismissDrawer()
+                    } else {
+                        withAnimation(.spring(response: 0.3, dampingFraction: 0.8)) {
+                            drawerDragOffset = 0
+                        }
+                    }
+                }
+        )
+    }
+
+    private func dismissDrawer() {
+        withAnimation(.spring(response: 0.35, dampingFraction: 0.8)) {
+            showDrawer = false
+            drawerDragOffset = 0
+        }
     }
 
     // MARK: - Top Bar
@@ -114,11 +307,15 @@ struct HomeView: View {
             }
 
             HStack {
-                // Left: Hamburger menu
-                Button { } label: {
-                    Image(systemName: "line.horizontal.3")
-                        .font(.system(size: 16, weight: .semibold))
-                        .foregroundColor(.white)
+                // Left: Hamburger — custom 2-line icon
+                Button {
+                    withAnimation(.spring(response: 0.35, dampingFraction: 0.8)) {
+                        showDrawer.toggle()
+                    }
+                } label: {
+                    HamburgerLines()
+                        .fill(.white)
+                        .frame(width: 18, height: 14)
                         .frame(width: 34, height: 34)
                         .background(Color.white.opacity(0.08))
                         .clipShape(Circle())
@@ -406,12 +603,13 @@ struct HomeView: View {
         .padding(.horizontal, 14)
         .contentShape(Rectangle())
         .onLongPressGesture(minimumDuration: 0.5) {
-            guard !isTransitioning else { return }
+            guard !isTransitioning, previewAreaEnabled else { return }
             UIImpactFeedbackGenerator(style: .medium).impactOccurred()
             previewAutoOpened = false
             handlePreviewToggle()
         }
         .onChange(of: cameraVM.recordingState) { newState in
+            guard previewAreaEnabled else { return }
             if newState == .recording && !showCameraPreview && !isTransitioning {
                 previewAutoOpened = true
                 handlePreviewToggle()
@@ -420,6 +618,7 @@ struct HomeView: View {
         // Handle EXTERNAL isPreviewActive changes (recording stop, background, etc.)
         .onChange(of: cameraVM.isPreviewActive) { active in
             guard !isInternalToggle else { return }
+            guard previewAreaEnabled || previewAutoOpened else { return }
             if !active && showCameraPreview {
                 // Play full iris-close + fade-in avatar sequence, same as manual sleep
                 isTransitioning = true
@@ -574,7 +773,6 @@ struct HomeView: View {
 
             VStack {
                 Spacer()
-                // "Hold to wake up" text above the buttons
                 Text("Hold to wake up the camera")
                     .font(.system(size: 13, weight: .medium))
                     .foregroundColor(.red)
