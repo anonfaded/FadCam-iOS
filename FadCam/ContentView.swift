@@ -23,6 +23,7 @@ struct ContentView: View {
                     .tabItem {
                         Label("Faditor Mini", systemImage: "film.stack")
                     }
+                    .badge("Soon")
                     .tag(2)
 
                 SettingsView()

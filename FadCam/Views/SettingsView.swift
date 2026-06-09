@@ -16,7 +16,7 @@ struct SettingsView: View {
     var body: some View {
         NavigationView {
             Form {
-                // MARK: — Video
+                // MARK: — Camera
                 Section {
                     NavigationLink(isActive: $pushVideoSettings) {
                         VideoSettingsView()
@@ -33,11 +33,7 @@ struct SettingsView: View {
                             .foregroundColor(.secondary)
                         }
                     }
-                } header: { Text("Video") }
-                footer: { Text("Resolution, frame rate, and encoding quality.") }
 
-                // MARK: — Recording
-                Section {
                     Toggle(isOn: $saveToPhotos) {
                         Label("Save to Photos", systemImage: "photo.on.rectangle")
                     }
@@ -55,11 +51,17 @@ struct SettingsView: View {
                                 .foregroundColor(.secondary)
                         }
                     }
-                } header: { Text("Recording") }
-                footer: { Text("Auto-save and watermark preferences for recorded media.") }
+                } header: { Text("Camera") }
+                footer: { Text("Video format, auto-save, and watermark preferences.") }
 
-                // MARK: — Onboarding
+                // MARK: — App Info
                 Section {
+                    NavigationLink {
+                        AboutView()
+                    } label: {
+                        Label("About", systemImage: "info.circle")
+                    }
+
                     Toggle(isOn: $resumeOnboarding) {
                         Label("Show Onboarding Again", systemImage: "arrow.counterclockwise")
                     }
@@ -71,45 +73,51 @@ struct SettingsView: View {
                         }
                     }
                     .tint(.red)
-                } header: { Text("Onboarding") }
-                footer: { Text("Toggle ON to show onboarding on next app launch. Toggle OFF to cancel.") }
 
-                // MARK: — Information
-                Section {
                     Button {
                         showGitHubLink = true
                     } label: {
                         HStack {
                             Label("Source Code", systemImage: "chevron.left.forwardslash.chevron.right")
+                                .foregroundColor(.primary)
                             Spacer()
-                            Image(systemName: "arrow.up.right").font(.caption).foregroundColor(.secondary)
+                            Image(systemName: "arrow.up.right")
+                                .font(.caption)
+                                .foregroundColor(.red.opacity(0.7))
                         }
                     }
-                    .foregroundColor(.primary)
 
                     Button {
                         showWebsiteLink = true
                     } label: {
                         HStack {
                             Label("Website", systemImage: "globe")
+                                .foregroundColor(.primary)
                             Spacer()
-                            Image(systemName: "arrow.up.right").font(.caption).foregroundColor(.secondary)
+                            Image(systemName: "arrow.up.right")
+                                .font(.caption)
+                                .foregroundColor(.red.opacity(0.7))
                         }
                     }
-                    .foregroundColor(.primary)
+                } header: { Text("App Info") }
+                footer: { Text("Toggle ON to show onboarding on next app launch. Toggle OFF to cancel.") }
 
-                    NavigationLink {
-                        AboutView()
-                    } label: {
-                        Label("About", systemImage: "info.circle")
-                    }
-
+                // MARK: — Danger Zone
+                Section {
                     NavigationLink {
                         TrashView()
                     } label: {
-                        Label("Trash", systemImage: "trash")
+                        HStack {
+                            Label("Trash", systemImage: "trash.fill")
+                                .foregroundColor(.red)
+                            Spacer()
+                            Image(systemName: "chevron.right")
+                                .font(.caption)
+                                .foregroundColor(.red.opacity(0.5))
+                        }
                     }
-                } header: { Text("Information") }
+                } header: { Text("Danger Zone") }
+                footer: { Text("Recover or permanently delete trashed recordings.") }
 
                 // MARK: — Footer
                 Section {
@@ -229,78 +237,129 @@ enum TrashAutoDeleteOption: String, CaseIterable, Identifiable {
 }
 
 struct AboutView: View {
+    @State private var copied = false
+
+    private var appName: String {
+        Bundle.main.infoDictionary?["CFBundleDisplayName"] as? String
+        ?? Bundle.main.infoDictionary?["CFBundleName"] as? String
+        ?? "FadCam"
+    }
+    private var version: String {
+        Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String ?? "1.0"
+    }
+    private var build: String {
+        Bundle.main.infoDictionary?["CFBundleVersion"] as? String ?? "1"
+    }
+    private var bundleID: String {
+        Bundle.main.bundleIdentifier ?? "com.fadseclab.fadcam"
+    }
+
+    private var allInfoText: String {
+        """
+        \(appName)
+        Version \(version) (Build \(build))
+        Bundle ID: \(bundleID)
+        iOS \(UIDevice.current.systemVersion) · \(UIDevice.current.model)
+        Licensed under GNU GPL v3.0
+        Made with love by FadSec Lab, Pakistan
+        """
+    }
+
     var body: some View {
         List {
             Section {
                 VStack(spacing: 12) {
-                    if let logo = UIImage(named: "HeaderLogo") {
-                        Image(uiImage: logo).resizable().aspectRatio(contentMode: .fit).frame(height: 40)
+                    if let appIcon = UIImage(named: "AppIcon") ??
+                        (Bundle.main.infoDictionary?["CFBundleIconName"] as? String)
+                            .flatMap({ UIImage(named: $0) }) {
+                        Image(uiImage: appIcon)
+                            .resizable()
+                            .aspectRatio(contentMode: .fit)
+                            .frame(width: 72, height: 72)
+                            .clipShape(RoundedRectangle(cornerRadius: 16))
                     }
-                    Text("FadCam").font(.title2.bold())
+                    Text(appName)
+                        .font(.title2.bold())
                     Text("Ad-free. Open source. Dashcam for iOS.")
-                        .font(.subheadline).foregroundColor(.secondary).multilineTextAlignment(.center)
-                    Text("Zero tracking. Zero logs.")
-                        .font(.caption).foregroundColor(.secondary)
+                        .font(.subheadline)
+                        .foregroundColor(.secondary)
+                        .multilineTextAlignment(.center)
                 }
-                .frame(maxWidth: .infinity).padding(.vertical, 8)
+                .frame(maxWidth: .infinity)
+                .padding(.vertical, 8)
             }
 
             Section {
-                HStack {
-                    Text("Version")
-                    Spacer()
-                    Text(Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String ?? "1.0")
-                        .foregroundColor(.secondary)
-                }
-                HStack {
-                    Text("Build")
-                    Spacer()
-                    Text(Bundle.main.infoDictionary?["CFBundleVersion"] as? String ?? "1")
-                        .foregroundColor(.secondary)
-                }
+                row("Version", version)
+                row("Build", build)
+                row("Bundle ID", bundleID)
             } header: { Text("App Info") }
 
             Section {
-                HStack {
-                    Text("iOS")
-                    Spacer()
-                    Text(UIDevice.current.systemVersion).foregroundColor(.secondary)
-                }
-                HStack {
-                    Text("Device")
-                    Spacer()
-                    Text(UIDevice.current.model).foregroundColor(.secondary)
-                }
+                row("iOS", UIDevice.current.systemVersion)
+                row("Device", UIDevice.current.model)
             } header: { Text("System") }
 
             Section {
-                Link(destination: URL(string: "https://github.com/anonfaded/FadCam-iOS")!) {
+                Button {
+                    UIPasteboard.general.string = allInfoText
+                    copied = true
+                    DispatchQueue.main.asyncAfter(deadline: .now() + 1.5) { copied = false }
+                } label: {
                     HStack {
-                        Text("GitHub")
+                        if copied {
+                            Label("Copied", systemImage: "checkmark")
+                                .foregroundColor(.green)
+                        } else {
+                            Label("Copy All Info", systemImage: "doc.on.doc")
+                        }
                         Spacer()
-                        Image(systemName: "arrow.up.right").font(.caption).foregroundColor(.secondary)
                     }
                 }
-                Link(destination: URL(string: "https://fadcam.fadseclab.com")!) {
-                    HStack {
-                        Text("Website")
-                        Spacer()
-                        Image(systemName: "arrow.up.right").font(.caption).foregroundColor(.secondary)
-                    }
-                }
-            } header: { Text("Links") }
+            }
 
             Section {
-                VStack(spacing: 8) {
+                VStack(spacing: 6) {
                     Text("Made with love by FadSec Lab, Pakistan")
                         .font(.footnote).foregroundColor(.secondary)
                     Text("GNU General Public License v3.0")
                         .font(.caption2).foregroundColor(.secondary).opacity(0.7)
                 }
-                .frame(maxWidth: .infinity).padding(.vertical, 8)
+                .frame(maxWidth: .infinity).padding(.vertical, 6)
             }
         }
-        .navigationTitle("About").navigationBarTitleDisplayMode(.inline)
+        .listStyle(.insetGrouped)
+        .navigationTitle("About")
+        .navigationBarTitleDisplayMode(.inline)
+        .onAppear { setTabBar(hidden: true) }
+        .onDisappear { setTabBar(hidden: false) }
+    }
+
+    private func row(_ title: String, _ value: String) -> some View {
+        HStack {
+            Text(title)
+                .foregroundColor(.primary)
+            Spacer()
+            Text(value)
+                .foregroundColor(.secondary)
+                .font(.system(.body, design: .monospaced))
+                .multilineTextAlignment(.trailing)
+        }
+    }
+
+    private func setTabBar(hidden: Bool) {
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.05) {
+            guard let scene = UIApplication.shared.connectedScenes.first as? UIWindowScene,
+                  let root = scene.windows.first?.rootViewController else { return }
+            if let tab = findTab(from: root) { tab.tabBar.isHidden = hidden }
+        }
+    }
+
+    private func findTab(from vc: UIViewController) -> UITabBarController? {
+        if let t = vc as? UITabBarController { return t }
+        if let t = vc.tabBarController { return t }
+        for child in vc.children { if let f = findTab(from: child) { return f } }
+        return nil
     }
 }
 

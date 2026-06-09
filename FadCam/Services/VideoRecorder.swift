@@ -130,9 +130,9 @@ final class VideoRecorder: @unchecked Sendable {
         vInput.transform = CGAffineTransform(rotationAngle: .pi / 2)
         let audioSettings: [String: Any] = [
             AVFormatIDKey: kAudioFormatMPEG4AAC,
-            AVNumberOfChannelsKey: 1,
-            AVSampleRateKey: 44100,
-            AVEncoderBitRateKey: 64000
+            AVNumberOfChannelsKey: 2,
+            AVSampleRateKey: 48000,
+            AVEncoderBitRateKey: 128000
         ]
         let aInput = AVAssetWriterInput(mediaType: .audio, outputSettings: audioSettings)
         aInput.expectsMediaDataInRealTime = true

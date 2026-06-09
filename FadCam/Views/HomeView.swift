@@ -125,6 +125,7 @@ struct HomeView: View {
     enum TopTab: String, CaseIterable, Identifiable {
         case fadCam = "FadCam", fadRec = "FadRec", fadMic = "FadMic"
         var id: String { rawValue }
+        var isComingSoon: Bool { self != .fadCam }
     }
 
     var body: some View {
@@ -389,9 +390,19 @@ struct HomeView: View {
                         selectedTopTab = tab
                     }
                 } label: {
-                    Text(tab.rawValue)
-                        .font(.system(size: 12, weight: .semibold))
-                        .foregroundColor(selectedTopTab == tab ? .white : .white.opacity(0.5))
+                    HStack(spacing: 3) {
+                        Text(tab.rawValue)
+                            .font(.system(size: 12, weight: .semibold))
+                        if tab.isComingSoon {
+                            Text("Soon")
+                                .font(.system(size: 7, weight: .heavy))
+                                .foregroundColor(.red.opacity(0.8))
+                                .padding(.horizontal, 4).padding(.vertical, 1)
+                                .background(Color.red.opacity(0.15))
+                                .clipShape(Capsule())
+                        }
+                    }
+                    .foregroundColor(selectedTopTab == tab ? .white : .white.opacity(0.5))
                         .frame(maxWidth: .infinity)
                         .padding(.vertical, 8)
                         .background(
