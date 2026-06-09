@@ -11,13 +11,14 @@ struct SettingsView: View {
     @State private var alertMessage = ""
     @State private var showGitHubLink = false
     @State private var showWebsiteLink = false
+    @State private var pushVideoSettings = false
 
     var body: some View {
         NavigationView {
             Form {
                 // MARK: — Video
                 Section {
-                    NavigationLink {
+                    NavigationLink(isActive: $pushVideoSettings) {
                         VideoSettingsView()
                     } label: {
                         HStack {
@@ -134,6 +135,9 @@ struct SettingsView: View {
                 }
             }
             .navigationTitle("Settings")
+            .onReceive(NotificationCenter.default.publisher(for: .openVideoSettings)) { _ in
+                pushVideoSettings = true
+            }
             .sheet(isPresented: $showGitHubLink) {
                 LinkPreviewView(
                     url: URL(string: "https://github.com/anonfaded/FadCam-iOS")!,

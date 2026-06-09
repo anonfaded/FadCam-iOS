@@ -95,9 +95,21 @@ final class CameraViewModel: NSObject, ObservableObject {
         return count
     }
 
+    /// Estimates remaining recording time based on free storage and current
+    /// VideoSettings (resolution + bitrate). Approximates 80% of rated bitrate
+    /// as actual data rate (H.264 overhead) plus 128 kbps for AAC audio.
     var estimatedRecordingTime: String {
         guard let storage = availableStorage else { return "Unknown" }
-        let totalSec = storage.free / 1_000_000
+        let vs = VideoSettings.shared
+        let videoBps: Int64
+        if vs.bitrateBps > 0 {
+            videoBps = Int64(vs.bitrateBps)
+        } else {
+            // Auto mode: estimate based on resolution
+            videoBps = Int64(vs.recommendedBitrateMbps) * 1_000_000
+        }
+        let dataRate = Int64(Double(videoBps) * 0.8) + 128_000  // 80% efficiency + audio
+        let totalSec = storage.free / dataRate
         if totalSec >= 86400 {
             let days = totalSec / 86400
             let hrs = (totalSec % 86400) / 3600
@@ -181,6 +193,10 @@ final class CameraViewModel: NSObject, ObservableObject {
         guard isPermissionGranted, isPreviewActive else { return }
         DispatchQueue.global(qos: .userInitiated).async { [weak self] in
             self?.cameraService.session.startRunning()
+            // Apply video format/fps AFTER session starts
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) { [weak self] in
+                self?.cameraService.applyVideoSettings()
+            }
         }
     }
 
@@ -197,6 +213,10 @@ final class CameraViewModel: NSObject, ObservableObject {
             try cameraService.switchCamera()
             withAnimation { currentCamera = cameraService.currentCamera }
             isFrontFlipped = false
+            // Re-apply video format/fps after switching
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) { [weak self] in
+                self?.cameraService.applyVideoSettings()
+            }
         } catch {
             errorMessage = error.localizedDescription
         }

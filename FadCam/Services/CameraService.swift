@@ -65,9 +65,6 @@ class CameraService: NSObject {
         videoDeviceInput = videoInput
         currentCamera = position
 
-        // Actively configure the camera format to match user-selected resolution & fps
-        configureActiveFormat(for: camera)
-
         if let microphone = AVCaptureDevice.default(for: .audio) {
             let audioInput = try AVCaptureDeviceInput(device: microphone)
             if session.canAddInput(audioInput) {
@@ -94,6 +91,7 @@ class CameraService: NSObject {
         }
     }
 
+    /// Must be called AFTER session.commitConfiguration() to take effect.
     /// Locks the camera to the best format matching VideoSettings resolution & fps.
     func configureActiveFormat(for camera: AVCaptureDevice) {
         let videoSettings = VideoSettings.shared
@@ -101,40 +99,46 @@ class CameraService: NSObject {
         let targetH = videoSettings.videoHeight
         let targetFps = videoSettings.selectedFrameRate
 
-        // Find the best matching format
+        // Find the best format: match resolution exactly, then prefer fps coverage.
+        // Score: size mismatch * 10000 + (larger fps gap = worse)
         var bestFormat: AVCaptureDevice.Format?
         var bestScore = Int.max
         for format in camera.formats {
             let dims = CMVideoFormatDescriptionGetDimensions(format.formatDescription)
             let w = Int(dims.width), h = Int(dims.height)
-            // Score: pixel-count distance + fps coverage
-            let sizeDist = abs((w * h) - (targetW * targetH))
-            let hasFps = format.videoSupportedFrameRateRanges.contains { range in
-                Double(targetFps) >= range.minFrameRate && Double(targetFps) <= range.maxFrameRate
+            guard w >= targetW, h >= targetH else { continue } // must cover our dimensions
+            var score = abs((w * h) - (targetW * targetH))
+            // Penalize heavily if this format can't reach our target FPS
+            if let maxFps = format.videoSupportedFrameRateRanges.map({ $0.maxFrameRate }).max(),
+               Double(targetFps) > maxFps {
+                score += Int((Double(targetFps) - maxFps) * 100)
             }
-            if !hasFps { continue }
-            if sizeDist < bestScore {
-                bestScore = sizeDist
+            if score < bestScore {
+                bestScore = score
                 bestFormat = format
             }
         }
 
         guard let format = bestFormat else {
-            log.info("No camera format matches \(targetW)×\(targetH) @ \(targetFps)fps — using default")
+            log.info("No camera format covers \(targetW)×\(targetH) @ \(targetFps)fps — using default")
             return
         }
 
+        let dims = CMVideoFormatDescriptionGetDimensions(format.formatDescription)
         do {
             try camera.lockForConfiguration()
             camera.activeFormat = format
-            // Set the desired frame duration
-            let fpsDuration = CMTime(value: 1, timescale: CMTimeScale(targetFps))
-            camera.activeVideoMinFrameDuration = fpsDuration
-            camera.activeVideoMaxFrameDuration = fpsDuration
+            // Only set if the format actually supports it
+            let ranges = format.videoSupportedFrameRateRanges
+            let maxSupported = ranges.map { $0.maxFrameRate }.max() ?? 30
+            let clampedFps = min(Double(targetFps), maxSupported)
+            let clampedDuration = CMTime(value: 1, timescale: Int32(clampedFps))
+            camera.activeVideoMinFrameDuration = clampedDuration
+            camera.activeVideoMaxFrameDuration = clampedDuration
             camera.unlockForConfiguration()
-            log.info("Camera format set to \(targetW)×\(targetH) @ \(targetFps)fps")
+            log.info("Camera format set to \(dims.width)×\(dims.height) @ \(clampedFps)fps (requested \(targetFps)fps)")
         } catch {
-            log.error("Failed to lock camera for format configuration: \(error.localizedDescription)")
+            log.error("Failed to lock camera for format config: \(error.localizedDescription)")
         }
     }
 
@@ -159,6 +163,14 @@ class CameraService: NSObject {
         isFrontRecordingMirrored = true
         configureVideoOutputMirroring()
         watermarkBufferPool = nil  // force re-creation on next frame
+    }
+
+    /// Applies the user's VideoSettings (resolution + fps) to the live camera device.
+    /// Must be called AFTER session.commitConfiguration() — camera format changes
+    /// are ignored if called while the session is in a begin/commit block.
+    func applyVideoSettings() {
+        guard let camera = videoDeviceInput?.device else { return }
+        configureActiveFormat(for: camera)
     }
 
     func saveToPhotos(url: URL) {

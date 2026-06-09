@@ -424,17 +424,30 @@ struct HomeView: View {
     }
 
     private var statusCard: some View {
-        VStack(spacing: 0) {
-            HStack(spacing: 8) {
-                iconCircle("video.fill", color: .green)
-                VStack(alignment: .leading, spacing: 1) {
-                    Text(cameraVM.currentCamera == .back ? "Back Camera" : "Front Camera")
-                        .font(.system(size: 12, weight: .semibold)).foregroundColor(.white)
-                    Text("4K · 30fps · Portrait")
-                        .font(.system(size: 9)).foregroundColor(.white.opacity(0.55))
+        let vs = VideoSettings.shared
+        return VStack(spacing: 0) {
+            // Camera row — tappable to open Video Settings
+            Button {
+                selectedTab = 3  // Settings tab (0=Home, 1=Records, 2=FaditorMini, 3=Settings)
+                DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) {
+                    NotificationCenter.default.post(name: .openVideoSettings, object: nil)
                 }
-                Spacer()
+            } label: {
+                HStack(spacing: 8) {
+                    iconCircle("video.fill", color: .green)
+                    VStack(alignment: .leading, spacing: 1) {
+                        Text(cameraVM.currentCamera == .back ? "Back Camera" : "Front Camera")
+                            .font(.system(size: 12, weight: .semibold)).foregroundColor(.white)
+                        Text("\(vs.selectedResolution.shortLabel) · \(vs.selectedFrameRate) fps · Portrait")
+                            .font(.system(size: 9)).foregroundColor(.white.opacity(0.55))
+                    }
+                    Spacer()
+                    Image(systemName: "chevron.right")
+                        .font(.system(size: 10, weight: .bold))
+                        .foregroundColor(.white.opacity(0.3))
+                }
             }
+            .buttonStyle(.plain)
             divider
             HStack(spacing: 8) {
                 iconCircle("hourglass", color: .orange)
