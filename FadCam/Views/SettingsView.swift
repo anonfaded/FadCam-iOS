@@ -6,24 +6,58 @@ struct SettingsView: View {
     @AppStorage("resumeOnboarding") private var resumeOnboarding = false
     @AppStorage("hasCompletedOnboarding") private var hasCompletedOnboarding = true
     @StateObject private var watermarkSettings = WatermarkSettings.shared
+    @StateObject private var videoSettings = VideoSettings.shared
     @State private var showingAlert = false
     @State private var alertMessage = ""
     @State private var showGitHubLink = false
     @State private var showWebsiteLink = false
-    @State private var showTrash = false
 
     var body: some View {
         NavigationView {
             Form {
+                // MARK: — Video
+                Section {
+                    NavigationLink {
+                        VideoSettingsView()
+                    } label: {
+                        HStack {
+                            Label("Video", systemImage: "video.fill")
+                            Spacer()
+                            VStack(alignment: .trailing, spacing: 2) {
+                                Text("\(videoSettings.selectedResolution.shortLabel)")
+                                    .font(.subheadline)
+                                Text("\(videoSettings.selectedFrameRate) fps")
+                                    .font(.caption2)
+                            }
+                            .foregroundColor(.secondary)
+                        }
+                    }
+                } header: { Text("Video") }
+                footer: { Text("Resolution, frame rate, and encoding quality.") }
+
+                // MARK: — Recording
                 Section {
                     Toggle(isOn: $saveToPhotos) {
                         Label("Save to Photos", systemImage: "photo.on.rectangle")
                     }
                     .onChange(of: saveToPhotos) { newValue in if newValue { requestPhotoPermission() } }
                     .tint(.red)
-                } header: { Text("Storage") }
-                footer: { Text("Automatically save recordings to your Photos library.") }
 
+                    NavigationLink {
+                        WatermarkSettingsView()
+                    } label: {
+                        HStack {
+                            Label("Watermark", systemImage: "text.word.spacing")
+                            Spacer()
+                            Text(watermarkSettings.mode.rawValue)
+                                .font(.subheadline)
+                                .foregroundColor(.secondary)
+                        }
+                    }
+                } header: { Text("Recording") }
+                footer: { Text("Auto-save and watermark preferences for recorded media.") }
+
+                // MARK: — Onboarding
                 Section {
                     Toggle(isOn: $resumeOnboarding) {
                         Label("Show Onboarding Again", systemImage: "arrow.counterclockwise")
@@ -38,22 +72,6 @@ struct SettingsView: View {
                     .tint(.red)
                 } header: { Text("Onboarding") }
                 footer: { Text("Toggle ON to show onboarding on next app launch. Toggle OFF to cancel.") }
-
-                // MARK: — Watermark
-                Section {
-                    NavigationLink {
-                        WatermarkSettingsView()
-                    } label: {
-                        HStack {
-                            Label("Watermark", systemImage: "text.word.spacing")
-                            Spacer()
-                            Text(watermarkSettings.mode.rawValue)
-                                .font(.subheadline)
-                                .foregroundColor(.secondary)
-                        }
-                    }
-                } header: { Text("Recording") }
-                footer: { Text("Customize the watermark shown on recorded videos.") }
 
                 // MARK: — Information
                 Section {
@@ -84,22 +102,15 @@ struct SettingsView: View {
                     } label: {
                         Label("About", systemImage: "info.circle")
                     }
+
+                    NavigationLink {
+                        TrashView()
+                    } label: {
+                        Label("Trash", systemImage: "trash")
+                    }
                 } header: { Text("Information") }
 
-                Section {
-                    Button {
-                        showTrash = true
-                    } label: {
-                        HStack {
-                            Label("Trash", systemImage: "trash")
-                            Spacer()
-                            Image(systemName: "chevron.right").font(.caption).foregroundColor(.secondary)
-                        }
-                    }
-                    .foregroundColor(.primary)
-                } header: { Text("Danger Zone") }
-                footer: { Text("Trashed files. Auto-cleanup settings are in the Trash screen.") }
-
+                // MARK: — Footer
                 Section {
                     VStack(spacing: 8) {
                         if let logo = UIImage(named: "HeaderLogo") {
@@ -123,9 +134,6 @@ struct SettingsView: View {
                 }
             }
             .navigationTitle("Settings")
-            .fullScreenCover(isPresented: $showTrash) {
-                TrashView()
-            }
             .sheet(isPresented: $showGitHubLink) {
                 LinkPreviewView(
                     url: URL(string: "https://github.com/anonfaded/FadCam-iOS")!,

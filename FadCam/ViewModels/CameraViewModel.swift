@@ -41,6 +41,8 @@ final class CameraViewModel: NSObject, ObservableObject {
         if let saved = UserDefaults.standard.string(forKey: "fadcam_selected_camera") {
             currentCamera = (saved == "front") ? .front : .back
         }
+        // Refresh hardware capabilities for video settings
+        VideoSettings.shared.refreshHardwareOptions()
         startStorageRefreshTimer()
         refreshStorage()
         NotificationCenter.default.addObserver(
@@ -264,7 +266,7 @@ final class CameraViewModel: NSObject, ObservableObject {
         let url = recordingURL
         try? FileManager.default.createDirectory(at: url.deletingLastPathComponent(), withIntermediateDirectories: true)
         do {
-            try cameraService.recorder.start(to: url)
+            try cameraService.recorder.start(to: url, settings: VideoSettings.shared)
         } catch {
             log.error("Failed to start recorder: \(error.localizedDescription)")
             errorMessage = "Failed to start recorder: \(error.localizedDescription)"

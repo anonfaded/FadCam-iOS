@@ -35,7 +35,7 @@ class CameraService: NSObject {
 
     override init() {
         super.init()
-        session.sessionPreset = .high
+        session.sessionPreset = .inputPriority
         if session.canAddOutput(photoOutput) {
             session.addOutput(photoOutput)
         }
@@ -65,6 +65,9 @@ class CameraService: NSObject {
         videoDeviceInput = videoInput
         currentCamera = position
 
+        // Actively configure the camera format to match user-selected resolution & fps
+        configureActiveFormat(for: camera)
+
         if let microphone = AVCaptureDevice.default(for: .audio) {
             let audioInput = try AVCaptureDeviceInput(device: microphone)
             if session.canAddInput(audioInput) {
@@ -88,6 +91,50 @@ class CameraService: NSObject {
         if session.canAddOutput(aDataOutput) {
             session.addOutput(aDataOutput)
             audioDataOutput = aDataOutput
+        }
+    }
+
+    /// Locks the camera to the best format matching VideoSettings resolution & fps.
+    func configureActiveFormat(for camera: AVCaptureDevice) {
+        let videoSettings = VideoSettings.shared
+        let targetW = videoSettings.videoWidth
+        let targetH = videoSettings.videoHeight
+        let targetFps = videoSettings.selectedFrameRate
+
+        // Find the best matching format
+        var bestFormat: AVCaptureDevice.Format?
+        var bestScore = Int.max
+        for format in camera.formats {
+            let dims = CMVideoFormatDescriptionGetDimensions(format.formatDescription)
+            let w = Int(dims.width), h = Int(dims.height)
+            // Score: pixel-count distance + fps coverage
+            let sizeDist = abs((w * h) - (targetW * targetH))
+            let hasFps = format.videoSupportedFrameRateRanges.contains { range in
+                Double(targetFps) >= range.minFrameRate && Double(targetFps) <= range.maxFrameRate
+            }
+            if !hasFps { continue }
+            if sizeDist < bestScore {
+                bestScore = sizeDist
+                bestFormat = format
+            }
+        }
+
+        guard let format = bestFormat else {
+            log.info("No camera format matches \(targetW)×\(targetH) @ \(targetFps)fps — using default")
+            return
+        }
+
+        do {
+            try camera.lockForConfiguration()
+            camera.activeFormat = format
+            // Set the desired frame duration
+            let fpsDuration = CMTime(value: 1, timescale: CMTimeScale(targetFps))
+            camera.activeVideoMinFrameDuration = fpsDuration
+            camera.activeVideoMaxFrameDuration = fpsDuration
+            camera.unlockForConfiguration()
+            log.info("Camera format set to \(targetW)×\(targetH) @ \(targetFps)fps")
+        } catch {
+            log.error("Failed to lock camera for format configuration: \(error.localizedDescription)")
         }
     }
 

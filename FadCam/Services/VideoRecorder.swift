@@ -22,10 +22,10 @@ final class VideoRecorder: @unchecked Sendable {
 
     var isRecording: Bool { hasStartedSession }
 
-    func start(to url: URL) throws {
+    func start(to url: URL, settings: VideoSettings) throws {
         try writeQueue.sync {
             if hasStartedSession { throw RecorderError.alreadyRecording }
-            try startWriterSync(url: url)
+            try startWriterSync(url: url, settings: settings)
             hasStartedSession = true
             sessionStarted = false
             log.info("Recording started to \(url.lastPathComponent)")
@@ -98,17 +98,31 @@ final class VideoRecorder: @unchecked Sendable {
         writeQueue.async(execute: workItem)
     }
 
-    private func startWriterSync(url: URL) throws {
+    private func startWriterSync(url: URL, settings: VideoSettings) throws {
         outputURL = url
         try? FileManager.default.removeItem(at: url)
         let writer: AVAssetWriter
         do { writer = try AVAssetWriter(outputURL: url, fileType: .mp4) }
         catch { throw RecorderError.writerCreationFailed }
-        let videoSettings: [String: Any] = [
+
+        var videoSettings: [String: Any] = [
             AVVideoCodecKey: AVVideoCodecType.h264,
-            AVVideoWidthKey: 1280,
-            AVVideoHeightKey: 720
+            AVVideoWidthKey: settings.videoWidth,
+            AVVideoHeightKey: settings.videoHeight
         ]
+
+        // Compression / bitrate
+        if settings.bitrateBps > 0 {
+            videoSettings[AVVideoCompressionPropertiesKey] = [
+                AVVideoAverageBitRateKey: settings.bitrateBps,
+                AVVideoExpectedSourceFrameRateKey: settings.selectedFrameRate
+            ]
+        } else {
+            videoSettings[AVVideoCompressionPropertiesKey] = [
+                AVVideoExpectedSourceFrameRateKey: settings.selectedFrameRate
+            ]
+        }
+
         let vInput = AVAssetWriterInput(mediaType: .video, outputSettings: videoSettings)
         vInput.expectsMediaDataInRealTime = true
         // Camera sample buffers are landscape. Both cameras use the same
