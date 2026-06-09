@@ -333,9 +333,12 @@ extension CameraService: AVCapturePhotoCaptureDelegate {
         let filename = "FadShot_\(formatter.string(from: Date())).jpg"
         let url = dir.appendingPathComponent(filename)
 
-        // Apply watermark if enabled
+        // Apply watermark + front-camera mirror if needed
         let wmSettings = WatermarkSettings.shared
-        let outputData = WatermarkRenderer.buildWatermarkedPhoto(jpegData: data, settings: wmSettings, cameraPosition: currentCamera) ?? data
+        let shouldMirror = currentCamera == .front && isFrontRecordingMirrored
+        let outputData = WatermarkRenderer.buildWatermarkedPhoto(
+            jpegData: data, settings: wmSettings, mirrorForPortrait: shouldMirror
+        ) ?? data
 
         do {
             try outputData.write(to: url)

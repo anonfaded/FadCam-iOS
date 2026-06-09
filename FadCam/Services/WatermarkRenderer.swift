@@ -82,62 +82,69 @@ enum WatermarkRenderer {
         return result
     }
 
-    /// Composites the watermark onto a FadShot photo, applying the necessary
-    /// rotation so the output is always portrait-oriented.
-    static func buildWatermarkedPhoto(jpegData: Data, settings: WatermarkSettings, cameraPosition: AVCaptureDevice.Position) -> Data? {
-        guard settings.isWatermarkShown else { return jpegData }
+    /// Composites the watermark onto a FadShot photo.
+    ///
+    /// The JPEG's raw pixel data is in camera-sensor landscape orientation.
+    /// EXIF metadata handles display rotation. We watermark the raw pixels
+    /// in their native landscape space and preserve the original EXIF.
+    static func buildWatermarkedPhoto(jpegData: Data, settings: WatermarkSettings, mirrorForPortrait: Bool) -> Data? {
+        // Only enter the pipeline if watermark OR mirror is needed
+        guard settings.isWatermarkShown || mirrorForPortrait else { return jpegData }
         guard let source = CGImageSourceCreateWithData(jpegData as CFData, nil),
               let rawCG = CGImageSourceCreateImageAtIndex(source, 0, nil) else {
             log.error("Photo watermark: failed to decode JPEG data")
             return jpegData
         }
 
-        // Rotate the raw camera image to portrait orientation.
-        // Back camera delivers landscape-right; front camera delivers landscape-left.
-        let rawCI = CIImage(cgImage: rawCG)
-        let portraitCI: CIImage
-        if cameraPosition == .front {
-            portraitCI = rawCI.transformed(by: CGAffineTransform(rotationAngle: -.pi / 2))
-                .transformed(by: CGAffineTransform(scaleX: -1, y: 1))
-        } else {
-            portraitCI = rawCI.transformed(by: CGAffineTransform(rotationAngle: .pi / 2))
-        }
-        let ext = portraitCI.extent
-        let w = ext.width
-        let h = ext.height
-        let background = portraitCI
+        // Get original EXIF orientation to preserve on output
+        let originalProps = CGImageSourceCopyPropertiesAtIndex(source, 0, nil) as? [CFString: Any]
+        let exifOrientation = (originalProps?[kCGImagePropertyOrientation] as? UInt32) ?? 1
 
-        let watermarkAttrStr = settings.buildWatermarkAttributedText(fontSize: settings.fontSize)
-        guard watermarkAttrStr.length > 0,
-              let wmCG = renderAttributedText(watermarkAttrStr,
-                                               opacity: settings.opacity,
-                                               shadow: settings.shadowEnabled) else {
-            log.error("Photo watermark: renderTextCG failed")
-            return jpegData
+        // Raw pixels are landscape.  Apply front-camera mirror if needed
+        // (same vertical flip as the video pipeline), then watermark in
+        // native landscape space and preserve original EXIF for display rotation.
+        var background = CIImage(cgImage: rawCG)
+        let ext = background.extent
+
+        if mirrorForPortrait {
+            background = background.transformed(by: CGAffineTransform(
+                a: 1, b: 0, c: 0, d: -1, tx: 0, ty: ext.height
+            )).cropped(to: ext)
         }
 
-        var wm = CIImage(cgImage: wmCG)
-        let textSize = wm.extent.size
+        // Watermark — only if not in .none mode
+        var composited = background
+        if settings.isWatermarkShown {
+            let watermarkAttrStr = settings.buildWatermarkAttributedText(fontSize: settings.fontSize)
+            guard watermarkAttrStr.length > 0,
+                  let wmCG = renderAttributedText(watermarkAttrStr,
+                                                   opacity: settings.opacity,
+                                                   shadow: settings.shadowEnabled) else {
+                log.error("Photo watermark: renderTextCG failed")
+                return jpegData
+            }
 
-        // Position directly in portrait space (no landscape rotation needed)
-        let portraitPad = padding
-        let pos = photoPosition(for: settings.corner,
-                                 textW: textSize.width,
-                                 textH: textSize.height,
-                                 imageW: w, imageH: h,
-                                 padding: portraitPad)
-        wm = wm.transformed(by: CGAffineTransform(translationX: pos.x, y: pos.y))
+            var wm = CIImage(cgImage: wmCG)
+            let textSize = wm.extent.size
 
-        guard let filter = CIFilter(name: "CISourceOverCompositing") else {
-            log.error("Photo watermark: filter unavailable")
-            return jpegData
-        }
-        filter.setValue(wm, forKey: kCIInputImageKey)
-        filter.setValue(background, forKey: kCIInputBackgroundImageKey)
+            // Use the same landscape-space transform used for video recording
+            let transform = watermarkTransform(for: settings.corner,
+                                               textSize: textSize,
+                                               landscapeExtent: ext)
+            wm = wm.transformed(by: transform)
 
-        guard let composited = filter.outputImage?.cropped(to: ext) else {
-            log.error("Photo watermark: compositing returned nil")
-            return jpegData
+            guard let filter = CIFilter(name: "CISourceOverCompositing") else {
+                log.error("Photo watermark: filter unavailable")
+                return jpegData
+            }
+            filter.setValue(wm, forKey: kCIInputImageKey)
+            filter.setValue(background, forKey: kCIInputBackgroundImageKey)
+
+            guard let result = filter.outputImage?.cropped(to: ext) else {
+                log.error("Photo watermark: compositing returned nil")
+                return jpegData
+            }
+            composited = result
         }
 
         let context = CIContext(options: [.highQualityDownsample: true])
@@ -146,34 +153,23 @@ enum WatermarkRenderer {
             return jpegData
         }
 
+        // Re-encode with original EXIF orientation preserved
         let outputData = NSMutableData()
         guard let dest = CGImageDestinationCreateWithData(outputData, "public.jpeg" as CFString, 1, nil) else {
             log.error("Photo watermark: CGImageDestinationCreate failed")
             return jpegData
         }
-        let options: [CFString: Any] = [kCGImageDestinationLossyCompressionQuality: 0.92]
-        CGImageDestinationAddImage(dest, outputCG, options as CFDictionary)
+        // Preserve the original orientation so the Photos app displays it correctly
+        CGImageDestinationAddImage(dest, outputCG, [
+            kCGImageDestinationLossyCompressionQuality: 0.92,
+            kCGImagePropertyOrientation: exifOrientation
+        ] as CFDictionary)
         guard CGImageDestinationFinalize(dest) else {
             log.error("Photo watermark: finalize failed")
             return jpegData
         }
 
         return outputData as Data
-    }
-
-    // MARK: - Photo Positioning
-
-    /// Simple corner positioning in portrait (no rotation needed for photos).
-    private static func photoPosition(for corner: WatermarkSettings.Corner,
-                                       textW: CGFloat, textH: CGFloat,
-                                       imageW: CGFloat, imageH: CGFloat,
-                                       padding: CGFloat) -> CGPoint {
-        switch corner {
-        case .topLeading:     return CGPoint(x: padding, y: imageH - textH - padding)
-        case .topTrailing:    return CGPoint(x: imageW - textW - padding, y: imageH - textH - padding)
-        case .bottomLeading:  return CGPoint(x: padding, y: padding)
-        case .bottomTrailing: return CGPoint(x: imageW - textW - padding, y: padding)
-        }
     }
 
     // MARK: - Text Rendering
