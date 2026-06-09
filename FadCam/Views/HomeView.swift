@@ -128,6 +128,8 @@ struct HomeView: View {
         var isComingSoon: Bool { self != .fadCam }
     }
 
+    @State private var comingSoonToast: String?
+
     var body: some View {
         ZStack {
             Color.black.ignoresSafeArea()
@@ -144,6 +146,24 @@ struct HomeView: View {
                 .padding(.bottom, 8)
             } else {
                 permissionDeniedView
+            }
+
+            // Toast overlay for coming-soon tabs
+            if let toast = comingSoonToast {
+                VStack {
+                    Spacer()
+                    Text(toast)
+                        .font(.system(size: 13, weight: .semibold))
+                        .foregroundColor(.white)
+                        .padding(.horizontal, 16).padding(.vertical, 9)
+                        .background(Color.black.opacity(0.85))
+                        .clipShape(Capsule())
+                        .overlay(Capsule().stroke(Color.orange.opacity(0.6), lineWidth: 1))
+                        .padding(.bottom, 120)
+                        .transition(.move(edge: .bottom).combined(with: .opacity))
+                        .allowsHitTesting(false)
+                }
+                .animation(.easeInOut(duration: 0.25), value: comingSoonToast)
             }
         }
         .gesture(
@@ -386,19 +406,30 @@ struct HomeView: View {
         HStack(spacing: 0) {
             ForEach(TopTab.allCases) { tab in
                 Button {
+                    if tab.isComingSoon {
+                        withAnimation(.easeInOut(duration: 0.2)) {
+                            comingSoonToast = "\(tab.rawValue) — Coming Soon"
+                        }
+                        DispatchQueue.main.asyncAfter(deadline: .now() + 1.6) {
+                            withAnimation(.easeInOut(duration: 0.3)) {
+                                comingSoonToast = nil
+                            }
+                        }
+                        return
+                    }
                     withAnimation(.spring(response: 0.35, dampingFraction: 0.75)) {
                         selectedTopTab = tab
                     }
                 } label: {
-                    HStack(spacing: 3) {
+                    HStack(spacing: 4) {
                         Text(tab.rawValue)
                             .font(.system(size: 12, weight: .semibold))
                         if tab.isComingSoon {
                             Text("Soon")
-                                .font(.system(size: 7, weight: .heavy))
-                                .foregroundColor(.red.opacity(0.8))
-                                .padding(.horizontal, 4).padding(.vertical, 1)
-                                .background(Color.red.opacity(0.15))
+                                .font(.system(size: 8, weight: .heavy))
+                                .foregroundColor(.orange.opacity(0.9))
+                                .padding(.horizontal, 5).padding(.vertical, 1.5)
+                                .background(Color.orange.opacity(0.2))
                                 .clipShape(Capsule())
                         }
                     }

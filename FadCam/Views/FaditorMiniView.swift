@@ -11,9 +11,17 @@ struct FaditorMiniView: View {
                     .font(.system(size: 56))
                     .foregroundColor(.green)
 
-                Text("Faditor Mini")
-                    .font(.system(size: 28, weight: .bold, design: .rounded))
-                    .foregroundColor(.green)
+                HStack(spacing: 6) {
+                    Text("Faditor Mini")
+                        .font(.system(size: 28, weight: .bold, design: .rounded))
+                        .foregroundColor(.green)
+                    Text("SOON")
+                        .font(.system(size: 9, weight: .heavy))
+                        .foregroundColor(.green)
+                        .padding(.horizontal, 6).padding(.vertical, 2)
+                        .background(Color.green.opacity(0.15))
+                        .clipShape(Capsule())
+                }
 
                 Text("Video Editor — Coming Soon")
                     .font(.title3)

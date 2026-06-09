@@ -52,7 +52,7 @@ struct SettingsView: View {
                         }
                     }
                 } header: { Text("Camera") }
-                footer: { Text("Video format, auto-save, and watermark preferences.") }
+                footer: { Text("Select video resolution and frame rate. When enabled, recordings are automatically saved to the Photos app. Customize the watermark overlay.") }
 
                 // MARK: — App Info
                 Section {
@@ -254,6 +254,18 @@ struct AboutView: View {
         Bundle.main.bundleIdentifier ?? "com.fadseclab.fadcam"
     }
 
+    /// Tries to load the primary app icon from the bundle.
+    private var appIconImage: UIImage? {
+        if let icons = Bundle.main.infoDictionary?["CFBundleIcons"] as? [String: Any],
+           let primary = icons["CFBundlePrimaryIcon"] as? [String: Any],
+           let files = primary["CFBundleIconFiles"] as? [String],
+           let last = files.last {
+            return UIImage(named: last)
+        }
+        // Fallback: try the asset catalog name
+        return UIImage(named: "AppIcon")
+    }
+
     private var allInfoText: String {
         """
         \(appName)
@@ -269,10 +281,8 @@ struct AboutView: View {
         List {
             Section {
                 VStack(spacing: 12) {
-                    if let appIcon = UIImage(named: "AppIcon") ??
-                        (Bundle.main.infoDictionary?["CFBundleIconName"] as? String)
-                            .flatMap({ UIImage(named: $0) }) {
-                        Image(uiImage: appIcon)
+                    if let icon = appIconImage {
+                        Image(uiImage: icon)
                             .resizable()
                             .aspectRatio(contentMode: .fit)
                             .frame(width: 72, height: 72)
@@ -280,7 +290,7 @@ struct AboutView: View {
                     }
                     Text(appName)
                         .font(.title2.bold())
-                    Text("Ad-free. Open source. Dashcam for iOS.")
+                    Text("Ad-free. Open source. Dashcam & Bodycam for iOS.")
                         .font(.subheadline)
                         .foregroundColor(.secondary)
                         .multilineTextAlignment(.center)
@@ -316,16 +326,6 @@ struct AboutView: View {
                         Spacer()
                     }
                 }
-            }
-
-            Section {
-                VStack(spacing: 6) {
-                    Text("Made with love by FadSec Lab, Pakistan")
-                        .font(.footnote).foregroundColor(.secondary)
-                    Text("GNU General Public License v3.0")
-                        .font(.caption2).foregroundColor(.secondary).opacity(0.7)
-                }
-                .frame(maxWidth: .infinity).padding(.vertical, 6)
             }
         }
         .listStyle(.insetGrouped)
