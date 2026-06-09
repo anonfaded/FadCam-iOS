@@ -83,7 +83,7 @@ final class WatermarkSettings: ObservableObject {
         // Inline logo image
         if let logo = UIImage(named: "HeaderLogo") {
             let ratio = logo.size.height / logo.size.width
-            let logoHeight = fontSize * 1.4
+            let logoHeight = fontSize * 2.2
             let logoWidth = logoHeight / ratio
             let attachment = NSTextAttachment()
             attachment.image = logo.withRenderingMode(.alwaysOriginal)

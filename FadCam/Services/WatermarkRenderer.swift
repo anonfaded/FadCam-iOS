@@ -23,7 +23,7 @@ private let log = Logger(subsystem: "com.fadseclab.fadcam", category: "watermark
 /// bounds, the same transform and corner mapping applies to both cameras.
 enum WatermarkRenderer {
 
-    private static let padding: CGFloat = 24
+    private static let padding: CGFloat = 8
 
     // MARK: - Public API
 
@@ -82,20 +82,30 @@ enum WatermarkRenderer {
         return result
     }
 
-    /// Composites the watermark onto a FadShot photo (already in portrait
-    /// orientation, no rotation needed). Returns JPEG data with watermark.
-    static func buildWatermarkedPhoto(jpegData: Data, settings: WatermarkSettings) -> Data? {
+    /// Composites the watermark onto a FadShot photo, applying the necessary
+    /// rotation so the output is always portrait-oriented.
+    static func buildWatermarkedPhoto(jpegData: Data, settings: WatermarkSettings, cameraPosition: AVCaptureDevice.Position) -> Data? {
         guard settings.isWatermarkShown else { return jpegData }
         guard let source = CGImageSourceCreateWithData(jpegData as CFData, nil),
-              let cgImage = CGImageSourceCreateImageAtIndex(source, 0, nil) else {
+              let rawCG = CGImageSourceCreateImageAtIndex(source, 0, nil) else {
             log.error("Photo watermark: failed to decode JPEG data")
             return jpegData
         }
 
-        let w = CGFloat(cgImage.width)
-        let h = CGFloat(cgImage.height)
-        let background = CIImage(cgImage: cgImage)
-        let ext = background.extent
+        // Rotate the raw camera image to portrait orientation.
+        // Back camera delivers landscape-right; front camera delivers landscape-left.
+        let rawCI = CIImage(cgImage: rawCG)
+        let portraitCI: CIImage
+        if cameraPosition == .front {
+            portraitCI = rawCI.transformed(by: CGAffineTransform(rotationAngle: -.pi / 2))
+                .transformed(by: CGAffineTransform(scaleX: -1, y: 1))
+        } else {
+            portraitCI = rawCI.transformed(by: CGAffineTransform(rotationAngle: .pi / 2))
+        }
+        let ext = portraitCI.extent
+        let w = ext.width
+        let h = ext.height
+        let background = portraitCI
 
         let watermarkAttrStr = settings.buildWatermarkAttributedText(fontSize: settings.fontSize)
         guard watermarkAttrStr.length > 0,

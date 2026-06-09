@@ -789,29 +789,41 @@ struct HomeView: View {
     }
 
     private var watermarkText: some View {
-        let fontSize = fontSizeForPreview
-        let brand = WatermarkSettings.brandPrefix
+        let fs = fontSizeForPreview
         let hasTs = watermarkSettings.showTimestamp
-        return Group {
+        let logoHeight = fs * 1.3
+
+        return HStack(spacing: 2) {
+            Text(WatermarkSettings.brandPrefix)
+                .font(.system(size: fs, weight: .semibold))
+
             if let logo = UIImage(named: "HeaderLogo") {
-                (Text(brand).font(.system(size: fontSize, weight: .semibold))
-                + Text(" ")
-                + Text(Image(uiImage: logo)).baselineOffset(-fontSize * 0.15)
-                + (hasTs ? Text(" - " + timestampForPreview).font(.system(size: fontSize, weight: .regular)) : Text("")))
+                let ratio = logo.size.width / logo.size.height
+                let logoW = logoHeight * ratio
+                Image(uiImage: logo)
+                    .resizable()
+                    .aspectRatio(contentMode: .fit)
+                    .frame(height: logoHeight)
+                    .frame(width: logoW)
             } else {
-                (Text(brand + "FadCam").font(.system(size: fontSize, weight: .semibold))
-                + (hasTs ? Text(" - " + timestampForPreview).font(.system(size: fontSize, weight: .regular)) : Text("")))
+                Text("FadCam")
+                    .font(.system(size: fs, weight: .bold))
+            }
+
+            if hasTs {
+                Text(" - " + timestampForPreview)
+                    .font(.system(size: fs, weight: .regular))
             }
         }
         .foregroundColor(.white.opacity(watermarkSettings.opacity))
         .shadow(
             color: watermarkSettings.shadowEnabled ? .black.opacity(0.5) : .clear,
-            radius: watermarkSettings.shadowEnabled ? 2 : 0,
+            radius: watermarkSettings.shadowEnabled ? 1.5 : 0,
             x: watermarkSettings.shadowEnabled ? 1 : 0,
             y: watermarkSettings.shadowEnabled ? 1 : 0
         )
-        .padding(.horizontal, 10)
-        .padding(.vertical, 4)
+        .padding(.horizontal, 8)
+        .padding(.vertical, 3)
     }
 
     private var timestampForPreview: String {

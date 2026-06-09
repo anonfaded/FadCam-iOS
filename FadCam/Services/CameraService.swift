@@ -335,7 +335,7 @@ extension CameraService: AVCapturePhotoCaptureDelegate {
 
         // Apply watermark if enabled
         let wmSettings = WatermarkSettings.shared
-        let outputData = WatermarkRenderer.buildWatermarkedPhoto(jpegData: data, settings: wmSettings) ?? data
+        let outputData = WatermarkRenderer.buildWatermarkedPhoto(jpegData: data, settings: wmSettings, cameraPosition: currentCamera) ?? data
 
         do {
             try outputData.write(to: url)

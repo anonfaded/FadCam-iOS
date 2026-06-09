@@ -1,16 +1,25 @@
 import SwiftUI
 import Combine
 
-/// Dedicated watermark customization screen with sticky live preview.
+/// Dedicated watermark customization screen with live preview.
 struct WatermarkSettingsView: View {
     @StateObject private var settings = WatermarkSettings.shared
     @State private var previewTimestamp = Date()
-    @State private var hostingTabBar: UITabBar?
 
     private let timer = Timer.publish(every: 1, on: .main, in: .common).autoconnect()
 
     var body: some View {
         List {
+            // MARK: - Live Preview
+            Section {
+                livePreviewCard
+                    .listRowInsets(EdgeInsets(top: 8, leading: 16, bottom: 12, trailing: 16))
+            } header: {
+                Text("Live Preview")
+            } footer: {
+                Text("This is how your watermark will look in recordings and FadShot photos.")
+            }
+
             // MARK: - Mode
             Section {
                 VStack(spacing: 12) {
@@ -99,39 +108,11 @@ struct WatermarkSettingsView: View {
             }
         }
         .listStyle(.insetGrouped)
-        .safeAreaInset(edge: .top, spacing: 0) {
-            VStack(spacing: 0) {
-                // Header
-                HStack {
-                    Text("Live Preview")
-                        .font(.footnote)
-                        .textCase(.uppercase)
-                        .foregroundColor(.secondary)
-                    Spacer()
-                }
-                .padding(.horizontal, 20)
-                .padding(.top, 8)
-
-                // Card
-                livePreviewCard
-                    .padding(.horizontal, 16)
-                    .padding(.bottom, 8)
-            }
-            .padding(.bottom, 4)
-            .background(.bar)
-        }
         .navigationTitle("Watermark")
         .navigationBarTitleDisplayMode(.large)
         .onReceive(timer) { _ in
             previewTimestamp = Date()
         }
-        .onAppear {
-            hostingTabBar?.isHidden = true
-        }
-        .onDisappear {
-            hostingTabBar?.isHidden = false
-        }
-        .background(HostingTabBarFinder(hostingTabBar: $hostingTabBar))
     }
 
     // MARK: - Live Preview Card
@@ -196,36 +177,43 @@ struct WatermarkSettingsView: View {
                 }
             }
         }
-        .padding(10)
+        .padding(8)
     }
 
     private var previewWatermarkLabel: some View {
-        let fontSize = previewFontSize
-        let brand = WatermarkSettings.brandPrefix
+        let fs = previewFontSize
         let hasTs = settings.mode == .textWithTimestamp
-        return Group {
+        let logoHeight = fs * 1.3
+
+        return HStack(spacing: 2) {
+            // "Captured by " text
+            Text(WatermarkSettings.brandPrefix)
+                .font(.system(size: fs, weight: .semibold))
+
+            // Logo image — properly sized
             if let logo = UIImage(named: "HeaderLogo") {
-                (Text(brand)
-                    .font(.system(size: fontSize, weight: .semibold))
-                + Text(" ")  // spacing before logo
-                + Text(Image(uiImage: logo)).baselineOffset(-fontSize * 0.15)
-                + (hasTs
-                    ? Text(" - " + timestampString)
-                        .font(.system(size: fontSize, weight: .regular))
-                    : Text("")))
+                let ratio = logo.size.width / logo.size.height
+                let logoW = logoHeight * ratio
+                Image(uiImage: logo)
+                    .resizable()
+                    .aspectRatio(contentMode: .fit)
+                    .frame(height: logoHeight)
+                    .frame(width: logoW)
             } else {
-                (Text("Captured by FadCam")
-                    .font(.system(size: fontSize, weight: .semibold))
-                + (hasTs
-                    ? Text(" - " + timestampString)
-                        .font(.system(size: fontSize, weight: .regular))
-                    : Text("")))
+                Text("FadCam")
+                    .font(.system(size: fs, weight: .bold))
+            }
+
+            // Timestamp (driven by mode, refreshes every second)
+            if hasTs {
+                Text(" - " + timestampString)
+                    .font(.system(size: fs, weight: .regular))
             }
         }
         .foregroundColor(.white.opacity(settings.opacity))
         .shadow(
             color: settings.shadowEnabled ? .black.opacity(0.5) : .clear,
-            radius: settings.shadowEnabled ? 2 : 0,
+            radius: settings.shadowEnabled ? 1.5 : 0,
             x: settings.shadowEnabled ? 1 : 0,
             y: settings.shadowEnabled ? 1 : 0
         )
@@ -237,9 +225,8 @@ struct WatermarkSettingsView: View {
         return formatter.string(from: previewTimestamp)
     }
 
-    /// Scaled font size for the preview card.
     private var previewFontSize: CGFloat {
-        max(8, settings.fontSize * 0.3)
+        max(8, settings.fontSize * 0.28)
     }
 
     // MARK: - Mode Picker
@@ -296,35 +283,6 @@ struct WatermarkSettingsView: View {
         }
         .buttonStyle(.plain)
     }
-}
-
-// MARK: - TabBar Hider (per-instance, not global)
-
-private struct HostingTabBarFinder: UIViewRepresentable {
-    @Binding var hostingTabBar: UITabBar?
-
-    func makeUIView(context: Context) -> UIView {
-        let view = UIView()
-        view.isHidden = true
-        DispatchQueue.main.async {
-            var responder: UIResponder? = view
-            while let r = responder {
-                if let tabBarController = r as? UITabBarController {
-                    hostingTabBar = tabBarController.tabBar
-                    break
-                }
-                if let nav = r as? UINavigationController,
-                   let tabBarController = nav.tabBarController {
-                    hostingTabBar = tabBarController.tabBar
-                    break
-                }
-                responder = r.next
-            }
-        }
-        return view
-    }
-
-    func updateUIView(_ uiView: UIView, context: Context) {}
 }
 
 // MARK: - Helpers
