@@ -20,6 +20,10 @@ struct RecordsView: View {
     @State private var scrollViewWidth: CGFloat = 0
     @State private var contentWidth: CGFloat = 0
 
+    // Drawer
+    @State private var showDrawer = false
+    @State private var drawerDragOffset: CGFloat = 0
+
     @AppStorage("records.sortOrder") private var storedSort = "newest"
     @AppStorage("records.viewMode") private var storedView = "grid"
     @State private var selectedFilter: MediaFilter = .all
@@ -98,7 +102,12 @@ struct RecordsView: View {
                 if isSelectionMode { selectionBottomBar }
                 if let toast = actionToast { toastView(toast) }
                 if !scrolledToTop { scrollFAB }
+
+                if showDrawer {
+                    drawerOverlay
+                }
             }
+            .animation(.spring(response: 0.35, dampingFraction: 0.8), value: showDrawer)
             .navigationTitle(isSelectionMode ? selectionTitle : "Recordings")
             .navigationBarTitleDisplayMode(isSelectionMode ? .inline : .large)
             .toolbar { toolbarContent }
@@ -168,10 +177,177 @@ struct RecordsView: View {
                         .font(.system(size: 13)).foregroundColor(.red)
                 }
             } else {
-                Button { viewModel.loadRecordings() } label: {
-                    Image(systemName: "arrow.clockwise").foregroundColor(.red)
+                HStack(spacing: 12) {
+                    Button { viewModel.loadRecordings() } label: {
+                        Image(systemName: "arrow.clockwise").foregroundColor(.red)
+                    }
+                    Button {
+                        withAnimation(.spring(response: 0.35, dampingFraction: 0.8)) {
+                            showDrawer.toggle()
+                        }
+                    } label: {
+                        HamburgerLinesFlipped()
+                            .fill(.white)
+                            .frame(width: 18, height: 14)
+                            .frame(width: 34, height: 34)
+                            .background(Color.white.opacity(0.08))
+                            .clipShape(Circle())
+                    }
                 }
             }
+        }
+    }
+
+    // MARK: - Drawer
+
+    private var drawerOverlay: some View {
+        ZStack(alignment: .trailing) {
+            Color.black.opacity(showDrawer ? 0.4 : 0)
+                .ignoresSafeArea()
+                .onTapGesture { dismissDrawer() }
+
+            VStack(alignment: .leading, spacing: 0) {
+                HStack(spacing: 12) {
+                    Text("Records Options")
+                        .font(.system(size: 18, weight: .semibold))
+                        .foregroundColor(.white)
+                    Spacer()
+                    Button { dismissDrawer() } label: {
+                        Image(systemName: "chevron.right")
+                            .font(.system(size: 16, weight: .medium))
+                            .foregroundColor(.white.opacity(0.7))
+                            .frame(width: 30, height: 30)
+                    }
+                }
+                .padding(.horizontal, 20)
+                .padding(.top, 54)
+                .padding(.bottom, 20)
+
+                VStack(alignment: .leading, spacing: 0) {
+                    Text("VIEW")
+                        .font(.system(size: 13, weight: .regular))
+                        .foregroundColor(.white.opacity(0.5))
+                        .padding(.horizontal, 20)
+                        .padding(.bottom, 8)
+
+                    // View Mode
+                    HStack {
+                        Label(viewMode == .grid ? "Grid View" : "List View", systemImage: viewMode == .grid ? "square.grid.2x2" : "list.bullet")
+                            .font(.system(size: 16))
+                            .foregroundColor(.white)
+                        Spacer()
+                        Button {
+                            withAnimation { viewMode = viewMode == .grid ? .list : .grid }
+                        } label: {
+                            Image(systemName: viewMode == .grid ? "list.bullet" : "square.grid.2x2")
+                                .font(.system(size: 16))
+                                .foregroundColor(.red)
+                                .frame(width: 36, height: 36)
+                                .background(Color.red.opacity(0.15))
+                                .clipShape(Circle())
+                        }
+                    }
+                    .padding(14)
+                    .background(Color.white.opacity(0.05))
+                    .clipShape(RoundedRectangle(cornerRadius: 10))
+                    .padding(.horizontal, 16)
+
+                    // Sort
+                    VStack(spacing: 0) {
+                        ForEach(SortOption.allCases) { option in
+                            Button {
+                                withAnimation { sortOption = option }
+                            } label: {
+                                HStack {
+                                    Label(option.rawValue, systemImage: option.icon)
+                                        .font(.system(size: 15))
+                                        .foregroundColor(.white)
+                                    Spacer()
+                                    if sortOption == option {
+                                        Image(systemName: "checkmark")
+                                            .font(.system(size: 13, weight: .bold))
+                                            .foregroundColor(.red)
+                                    }
+                                }
+                                .padding(.horizontal, 16)
+                                .padding(.vertical, 12)
+                            }
+                            if option != SortOption.allCases.last {
+                                Divider().background(Color.white.opacity(0.06)).padding(.leading, 16)
+                            }
+                        }
+                    }
+                    .background(Color.white.opacity(0.05))
+                    .clipShape(RoundedRectangle(cornerRadius: 10))
+                    .padding(.horizontal, 16)
+                    .padding(.top, 12)
+                }
+
+                Spacer()
+
+                Divider()
+                    .background(Color.white.opacity(0.08))
+                    .padding(.horizontal, 20)
+
+                Button { viewModel.loadRecordings() } label: {
+                    HStack(spacing: 10) {
+                        Image(systemName: "arrow.clockwise")
+                            .font(.system(size: 16))
+                            .foregroundColor(.white.opacity(0.6))
+                        Text("Refresh")
+                            .font(.system(size: 14))
+                            .foregroundColor(.white.opacity(0.6))
+                        Spacer()
+                    }
+                    .padding(.horizontal, 20)
+                    .padding(.vertical, 13)
+                }
+
+                VStack(spacing: 6) {
+                    Text("\(viewModel.recordings.count) recordings")
+                        .font(.system(size: 12))
+                        .foregroundColor(.white.opacity(0.4))
+                }
+                .frame(maxWidth: .infinity)
+                .padding(.bottom, 36)
+            }
+            .frame(width: 300)
+            .background(
+                LinearGradient(
+                    colors: [
+                        Color(red: 0.06, green: 0.06, blue: 0.07),
+                        Color(red: 0.02, green: 0.02, blue: 0.03),
+                        Color.black
+                    ],
+                    startPoint: .top,
+                    endPoint: .bottom
+                )
+                .ignoresSafeArea()
+            )
+            .clipShape(LeftRoundedRectangle(radius: 24))
+            .offset(x: drawerDragOffset)
+        }
+        .gesture(
+            DragGesture(minimumDistance: 10)
+                .onChanged { val in
+                    drawerDragOffset = max(0, val.translation.width)
+                }
+                .onEnded { val in
+                    if val.predictedEndTranslation.width > 80 {
+                        dismissDrawer()
+                    } else {
+                        withAnimation(.spring(response: 0.3, dampingFraction: 0.8)) {
+                            drawerDragOffset = 0
+                        }
+                    }
+                }
+        )
+    }
+
+    private func dismissDrawer() {
+        withAnimation(.spring(response: 0.35, dampingFraction: 0.8)) {
+            showDrawer = false
+            drawerDragOffset = 0
         }
     }
 

@@ -36,6 +36,43 @@ struct RightRoundedRectangle: Shape {
     }
 }
 
+/// A rectangle with rounded corners only on the left (leading) side.
+/// Used for right-side drawers.
+struct LeftRoundedRectangle: Shape {
+    let radius: CGFloat
+    func path(in rect: CGRect) -> Path {
+        var path = Path()
+        let r = min(radius, min(rect.width, rect.height) / 2)
+        path.move(to: CGPoint(x: r, y: 0))
+        path.addLine(to: CGPoint(x: rect.width, y: 0))
+        path.addLine(to: CGPoint(x: rect.width, y: rect.height))
+        path.addLine(to: CGPoint(x: r, y: rect.height))
+        path.addQuadCurve(to: CGPoint(x: 0, y: rect.height - r), control: CGPoint(x: r, y: rect.height))
+        path.addLine(to: CGPoint(x: 0, y: r))
+        path.addQuadCurve(to: CGPoint(x: r, y: 0), control: CGPoint(x: 0, y: 0))
+        path.closeSubpath()
+        return path
+    }
+}
+
+// MARK: - Custom 2-Line Hamburger Icon (flipped — 2nd line right-aligned)
+
+struct HamburgerLinesFlipped: Shape {
+    func path(in rect: CGRect) -> Path {
+        var path = Path()
+        let w = rect.width
+        let h = rect.height
+        let lineH: CGFloat = 2
+        let spacing: CGFloat = 5
+        // Top line — full width
+        path.addRoundedRect(in: CGRect(x: 0, y: (h - lineH * 2 - spacing) / 2, width: w, height: lineH), cornerSize: CGSize(width: 1, height: 1))
+        // Bottom line — 60% width, right-aligned
+        let bottomW = w * 0.6
+        path.addRoundedRect(in: CGRect(x: w - bottomW, y: (h - lineH * 2 - spacing) / 2 + lineH + spacing, width: bottomW, height: lineH), cornerSize: CGSize(width: 1, height: 1))
+        return path
+    }
+}
+
 struct HomeView: View {
     @ObservedObject var cameraVM: CameraViewModel
     @Binding var selectedTab: Int
@@ -457,7 +494,8 @@ struct HomeView: View {
 
     private var timeCard: some View {
         TimelineView(.periodic(from: .now, by: 1)) { context in
-            HStack(alignment: .top) {
+            HStack(alignment: .top, spacing: 8) {
+                Image(systemName: "clock.fill").font(.system(size: 12)).foregroundColor(.white.opacity(0.6))
                 VStack(alignment: .leading, spacing: 1) {
                     Text(timeString(context.date))
                         .font(.system(size: 18, weight: .bold, design: .rounded))
@@ -470,7 +508,6 @@ struct HomeView: View {
                         .foregroundColor(.white.opacity(0.7))
                 }
                 Spacer()
-                Image(systemName: "clock.fill").font(.system(size: 12)).foregroundColor(.white.opacity(0.6))
             }
             .padding(10)
             .frame(maxWidth: .infinity, alignment: .leading)
@@ -1129,18 +1166,6 @@ struct HomeView: View {
             .buttonStyle(.plain)
             .frame(maxWidth: .infinity)
 
-            Button {
-                UIImpactFeedbackGenerator(style: .medium).impactOccurred()
-                cameraVM.switchCamera()
-            } label: {
-                Image(systemName: "arrow.triangle.2.circlepath.camera.fill")
-                    .font(.system(size: 16))
-                    .foregroundColor(.white)
-                    .frame(width: 50, height: 50)
-                    .background(Color.white.opacity(0.08))
-                    .clipShape(Circle())
-            }
-
             if cameraVM.currentCamera == .front {
                 Button {
                     UIImpactFeedbackGenerator(style: .light).impactOccurred()
@@ -1153,6 +1178,18 @@ struct HomeView: View {
                         .background(Color.white.opacity(0.08))
                         .clipShape(Circle())
                 }
+            }
+
+            Button {
+                UIImpactFeedbackGenerator(style: .medium).impactOccurred()
+                cameraVM.switchCamera()
+            } label: {
+                Image(systemName: "arrow.triangle.2.circlepath.camera.fill")
+                    .font(.system(size: 16))
+                    .foregroundColor(.white)
+                    .frame(width: 50, height: 50)
+                    .background(Color.white.opacity(0.08))
+                    .clipShape(Circle())
             }
         }
         .padding(.horizontal, 14)
