@@ -43,13 +43,16 @@ struct LeftRoundedRectangle: Shape {
     func path(in rect: CGRect) -> Path {
         var path = Path()
         let r = min(radius, min(rect.width, rect.height) / 2)
-        path.move(to: CGPoint(x: r, y: 0))
+        // Start at top-left, just below the rounded corner
+        path.move(to: CGPoint(x: 0, y: r))
+        // Top-left corner: curve from (0,r) to (r,0), control at corner (0,0)
+        path.addQuadCurve(to: CGPoint(x: r, y: 0), control: CGPoint(x: 0, y: 0))
+        // Top edge → right edge → bottom edge (sharp right side)
         path.addLine(to: CGPoint(x: rect.width, y: 0))
         path.addLine(to: CGPoint(x: rect.width, y: rect.height))
         path.addLine(to: CGPoint(x: r, y: rect.height))
-        path.addQuadCurve(to: CGPoint(x: 0, y: rect.height - r), control: CGPoint(x: r, y: rect.height))
-        path.addLine(to: CGPoint(x: 0, y: r))
-        path.addQuadCurve(to: CGPoint(x: r, y: 0), control: CGPoint(x: 0, y: 0))
+        // Bottom-left corner: curve from (r,h) to (0,h-r), control at corner (0,h)
+        path.addQuadCurve(to: CGPoint(x: 0, y: rect.height - r), control: CGPoint(x: 0, y: rect.height))
         path.closeSubpath()
         return path
     }
@@ -356,9 +359,6 @@ struct HomeView: View {
                     HamburgerLines()
                         .fill(.white)
                         .frame(width: 18, height: 14)
-                        .frame(width: 34, height: 34)
-                        .background(Color.white.opacity(0.08))
-                        .clipShape(Circle())
                 }
                 Spacer()
                 // Right: Pro badge
@@ -494,8 +494,8 @@ struct HomeView: View {
 
     private var timeCard: some View {
         TimelineView(.periodic(from: .now, by: 1)) { context in
-            HStack(alignment: .top, spacing: 8) {
-                Image(systemName: "clock.fill").font(.system(size: 12)).foregroundColor(.white.opacity(0.6))
+            HStack(alignment: .top, spacing: 10) {
+                iconCircle("clock.fill", color: .white)
                 VStack(alignment: .leading, spacing: 1) {
                     Text(timeString(context.date))
                         .font(.system(size: 18, weight: .bold, design: .rounded))

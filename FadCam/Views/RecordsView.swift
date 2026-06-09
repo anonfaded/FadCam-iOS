@@ -26,6 +26,7 @@ struct RecordsView: View {
 
     @AppStorage("records.sortOrder") private var storedSort = "newest"
     @AppStorage("records.viewMode") private var storedView = "grid"
+    @AppStorage("records.hideThumbnails") private var hideThumbnails = false
     @State private var selectedFilter: MediaFilter = .all
     @State private var cameraSubFilter: CameraSubFilter = .all
     @State private var sortOption: SortOption = .newest
@@ -105,6 +106,7 @@ struct RecordsView: View {
 
                 if showDrawer {
                     drawerOverlay
+                        .transition(.move(edge: .trailing))
                 }
             }
             .animation(.spring(response: 0.35, dampingFraction: 0.8), value: showDrawer)
@@ -177,22 +179,14 @@ struct RecordsView: View {
                         .font(.system(size: 13)).foregroundColor(.red)
                 }
             } else {
-                HStack(spacing: 12) {
-                    Button { viewModel.loadRecordings() } label: {
-                        Image(systemName: "arrow.clockwise").foregroundColor(.red)
+                Button {
+                    withAnimation(.spring(response: 0.35, dampingFraction: 0.8)) {
+                        showDrawer.toggle()
                     }
-                    Button {
-                        withAnimation(.spring(response: 0.35, dampingFraction: 0.8)) {
-                            showDrawer.toggle()
-                        }
-                    } label: {
-                        HamburgerLinesFlipped()
-                            .fill(.white)
-                            .frame(width: 18, height: 14)
-                            .frame(width: 34, height: 34)
-                            .background(Color.white.opacity(0.08))
-                            .clipShape(Circle())
-                    }
+                } label: {
+                    HamburgerLinesFlipped()
+                        .fill(.white)
+                        .frame(width: 18, height: 14)
                 }
             }
         }
@@ -224,92 +218,34 @@ struct RecordsView: View {
                 .padding(.bottom, 20)
 
                 VStack(alignment: .leading, spacing: 0) {
-                    Text("VIEW")
+                    Text("PRIVACY")
                         .font(.system(size: 13, weight: .regular))
                         .foregroundColor(.white.opacity(0.5))
                         .padding(.horizontal, 20)
                         .padding(.bottom, 8)
 
-                    // View Mode
                     HStack {
-                        Label(viewMode == .grid ? "Grid View" : "List View", systemImage: viewMode == .grid ? "square.grid.2x2" : "list.bullet")
+                        Label("Hide Thumbnails", systemImage: "eye.slash.fill")
                             .font(.system(size: 16))
                             .foregroundColor(.white)
                         Spacer()
-                        Button {
-                            withAnimation { viewMode = viewMode == .grid ? .list : .grid }
-                        } label: {
-                            Image(systemName: viewMode == .grid ? "list.bullet" : "square.grid.2x2")
-                                .font(.system(size: 16))
-                                .foregroundColor(.red)
-                                .frame(width: 36, height: 36)
-                                .background(Color.red.opacity(0.15))
-                                .clipShape(Circle())
-                        }
+                        Toggle("", isOn: $hideThumbnails)
+                            .labelsHidden()
+                            .tint(.red)
                     }
                     .padding(14)
                     .background(Color.white.opacity(0.05))
                     .clipShape(RoundedRectangle(cornerRadius: 10))
                     .padding(.horizontal, 16)
 
-                    // Sort
-                    VStack(spacing: 0) {
-                        ForEach(SortOption.allCases) { option in
-                            Button {
-                                withAnimation { sortOption = option }
-                            } label: {
-                                HStack {
-                                    Label(option.rawValue, systemImage: option.icon)
-                                        .font(.system(size: 15))
-                                        .foregroundColor(.white)
-                                    Spacer()
-                                    if sortOption == option {
-                                        Image(systemName: "checkmark")
-                                            .font(.system(size: 13, weight: .bold))
-                                            .foregroundColor(.red)
-                                    }
-                                }
-                                .padding(.horizontal, 16)
-                                .padding(.vertical, 12)
-                            }
-                            if option != SortOption.allCases.last {
-                                Divider().background(Color.white.opacity(0.06)).padding(.leading, 16)
-                            }
-                        }
-                    }
-                    .background(Color.white.opacity(0.05))
-                    .clipShape(RoundedRectangle(cornerRadius: 10))
-                    .padding(.horizontal, 16)
-                    .padding(.top, 12)
+                    Text("Replaces all file thumbnails with a privacy icon. Toggle in real-time.")
+                        .font(.system(size: 12))
+                        .foregroundColor(.white.opacity(0.5))
+                        .padding(.horizontal, 20)
+                        .padding(.top, 8)
                 }
 
                 Spacer()
-
-                Divider()
-                    .background(Color.white.opacity(0.08))
-                    .padding(.horizontal, 20)
-
-                Button { viewModel.loadRecordings() } label: {
-                    HStack(spacing: 10) {
-                        Image(systemName: "arrow.clockwise")
-                            .font(.system(size: 16))
-                            .foregroundColor(.white.opacity(0.6))
-                        Text("Refresh")
-                            .font(.system(size: 14))
-                            .foregroundColor(.white.opacity(0.6))
-                        Spacer()
-                    }
-                    .padding(.horizontal, 20)
-                    .padding(.vertical, 13)
-                }
-
-                VStack(spacing: 6) {
-                    Text("\(viewModel.recordings.count) recordings")
-                        .font(.system(size: 12))
-                        .foregroundColor(.white.opacity(0.4))
-                }
-                .frame(maxWidth: .infinity)
-                .padding(.bottom, 36)
             }
             .frame(width: 300)
             .background(
@@ -345,10 +281,8 @@ struct RecordsView: View {
     }
 
     private func dismissDrawer() {
-        withAnimation(.spring(response: 0.35, dampingFraction: 0.8)) {
-            showDrawer = false
-            drawerDragOffset = 0
-        }
+        showDrawer = false
+        drawerDragOffset = 0
     }
 
     // MARK: - Confirmations
@@ -1159,6 +1093,7 @@ struct RecordingCard: View {
     let onInfo: () -> Void
     let onDelete: () -> Void
     @State private var thumbnail: UIImage?
+    @AppStorage("records.hideThumbnails") private var hideThumbnails = false
 
     var body: some View {
         VStack(alignment: .leading, spacing: 6) {
@@ -1346,7 +1281,9 @@ struct RecordingCard: View {
 
     @ViewBuilder
     private var thumbnailView: some View {
-        if let t = thumbnail {
+        if hideThumbnails {
+            privacyThumbnail
+        } else if let t = thumbnail {
             Image(uiImage: t).resizable().aspectRatio(contentMode: .fill)
         } else {
             Rectangle()
@@ -1357,6 +1294,16 @@ struct RecordingCard: View {
                         .foregroundColor(.gray)
                 )
         }
+    }
+
+    private var privacyThumbnail: some View {
+        Rectangle()
+            .fill(Color(.systemGray5).opacity(0.25))
+            .overlay(
+                Image(systemName: "eye.slash.fill")
+                    .font(.system(size: 28))
+                    .foregroundColor(.white.opacity(0.3))
+            )
     }
 }
 
@@ -1374,6 +1321,7 @@ struct RecordingListRow: View {
     let onInfo: () -> Void
     let onDelete: () -> Void
     @State private var thumbnail: UIImage?
+    @AppStorage("records.hideThumbnails") private var hideThumbnails = false
 
     var body: some View {
         HStack(spacing: 12) {
@@ -1493,7 +1441,9 @@ struct RecordingListRow: View {
 
     @ViewBuilder
     private var thumbnailView: some View {
-        if let t = thumbnail {
+        if hideThumbnails {
+            privacyThumbnail
+        } else if let t = thumbnail {
             Image(uiImage: t).resizable().aspectRatio(contentMode: .fill)
         } else {
             Rectangle()
@@ -1503,6 +1453,16 @@ struct RecordingListRow: View {
                         .foregroundColor(.gray)
                 )
         }
+    }
+
+    private var privacyThumbnail: some View {
+        Rectangle()
+            .fill(Color(.systemGray5).opacity(0.25))
+            .overlay(
+                Image(systemName: "eye.slash.fill")
+                    .font(.title3)
+                    .foregroundColor(.white.opacity(0.3))
+            )
     }
 }
 
