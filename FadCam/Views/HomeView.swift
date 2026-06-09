@@ -767,7 +767,7 @@ struct HomeView: View {
     /// Renders the same watermark on the live preview that gets recorded into the video.
     private var liveWatermarkView: some View {
         Group {
-            if watermarkSettings.enabled && !watermarkSettings.text.isEmpty {
+            if watermarkSettings.isWatermarkShown {
                 VStack {
                     if watermarkSettings.corner == .topLeading || watermarkSettings.corner == .topTrailing {
                         HStack {
@@ -789,11 +789,35 @@ struct HomeView: View {
     }
 
     private var watermarkText: some View {
-        Text(watermarkSettings.text)
-            .font(.system(size: fontSizeForPreview, weight: .semibold))
-            .foregroundColor(.white.opacity(watermarkSettings.opacity))
-            .padding(.horizontal, 10)
-            .padding(.vertical, 4)
+        let fontSize = fontSizeForPreview
+        let brand = WatermarkSettings.brandPrefix
+        let hasTs = watermarkSettings.showTimestamp
+        return Group {
+            if let logo = UIImage(named: "HeaderLogo") {
+                (Text(brand).font(.system(size: fontSize, weight: .semibold))
+                + Text(" ")
+                + Text(Image(uiImage: logo)).baselineOffset(-fontSize * 0.15)
+                + (hasTs ? Text(" - " + timestampForPreview).font(.system(size: fontSize, weight: .regular)) : Text("")))
+            } else {
+                (Text(brand + "FadCam").font(.system(size: fontSize, weight: .semibold))
+                + (hasTs ? Text(" - " + timestampForPreview).font(.system(size: fontSize, weight: .regular)) : Text("")))
+            }
+        }
+        .foregroundColor(.white.opacity(watermarkSettings.opacity))
+        .shadow(
+            color: watermarkSettings.shadowEnabled ? .black.opacity(0.5) : .clear,
+            radius: watermarkSettings.shadowEnabled ? 2 : 0,
+            x: watermarkSettings.shadowEnabled ? 1 : 0,
+            y: watermarkSettings.shadowEnabled ? 1 : 0
+        )
+        .padding(.horizontal, 10)
+        .padding(.vertical, 4)
+    }
+
+    private var timestampForPreview: String {
+        let formatter = DateFormatter()
+        formatter.dateFormat = WatermarkSettings.timestampFormat
+        return formatter.string(from: Date())
     }
 
     /// Scale font size from recorded 1280-width to the preview area width.

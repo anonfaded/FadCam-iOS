@@ -2,6 +2,7 @@ import UIKit
 import AVFoundation
 import CoreImage
 import CoreGraphics
+import ImageIO
 import Foundation
 import OSLog
 
@@ -49,8 +50,13 @@ enum WatermarkRenderer {
             background = background.transformed(by: rawVerticalFlip).cropped(to: ext)
         }
 
-        guard settings.enabled, !settings.text.isEmpty else { return background }
-        guard let wmCG = renderTextCG(settings: settings) else { return nil }
+        guard settings.isWatermarkShown else { return background }
+
+        let watermarkAttrStr = settings.buildWatermarkAttributedText(fontSize: settings.fontSize)
+        guard watermarkAttrStr.length > 0,
+              let wmCG = renderAttributedText(watermarkAttrStr,
+                                               opacity: settings.opacity,
+                                               shadow: settings.shadowEnabled) else { return nil }
         var wm = CIImage(cgImage: wmCG)
         let textSize = wm.extent.size  // (tw, th) — width and height of unrotated text
 
@@ -76,28 +82,142 @@ enum WatermarkRenderer {
         return result
     }
 
+    /// Composites the watermark onto a FadShot photo (already in portrait
+    /// orientation, no rotation needed). Returns JPEG data with watermark.
+    static func buildWatermarkedPhoto(jpegData: Data, settings: WatermarkSettings) -> Data? {
+        guard settings.isWatermarkShown else { return jpegData }
+        guard let source = CGImageSourceCreateWithData(jpegData as CFData, nil),
+              let cgImage = CGImageSourceCreateImageAtIndex(source, 0, nil) else {
+            log.error("Photo watermark: failed to decode JPEG data")
+            return jpegData
+        }
+
+        let w = CGFloat(cgImage.width)
+        let h = CGFloat(cgImage.height)
+        let background = CIImage(cgImage: cgImage)
+        let ext = background.extent
+
+        let watermarkAttrStr = settings.buildWatermarkAttributedText(fontSize: settings.fontSize)
+        guard watermarkAttrStr.length > 0,
+              let wmCG = renderAttributedText(watermarkAttrStr,
+                                               opacity: settings.opacity,
+                                               shadow: settings.shadowEnabled) else {
+            log.error("Photo watermark: renderTextCG failed")
+            return jpegData
+        }
+
+        var wm = CIImage(cgImage: wmCG)
+        let textSize = wm.extent.size
+
+        // Position directly in portrait space (no landscape rotation needed)
+        let portraitPad = padding
+        let pos = photoPosition(for: settings.corner,
+                                 textW: textSize.width,
+                                 textH: textSize.height,
+                                 imageW: w, imageH: h,
+                                 padding: portraitPad)
+        wm = wm.transformed(by: CGAffineTransform(translationX: pos.x, y: pos.y))
+
+        guard let filter = CIFilter(name: "CISourceOverCompositing") else {
+            log.error("Photo watermark: filter unavailable")
+            return jpegData
+        }
+        filter.setValue(wm, forKey: kCIInputImageKey)
+        filter.setValue(background, forKey: kCIInputBackgroundImageKey)
+
+        guard let composited = filter.outputImage?.cropped(to: ext) else {
+            log.error("Photo watermark: compositing returned nil")
+            return jpegData
+        }
+
+        let context = CIContext(options: [.highQualityDownsample: true])
+        guard let outputCG = context.createCGImage(composited, from: ext) else {
+            log.error("Photo watermark: createCGImage failed")
+            return jpegData
+        }
+
+        let outputData = NSMutableData()
+        guard let dest = CGImageDestinationCreateWithData(outputData, "public.jpeg" as CFString, 1, nil) else {
+            log.error("Photo watermark: CGImageDestinationCreate failed")
+            return jpegData
+        }
+        let options: [CFString: Any] = [kCGImageDestinationLossyCompressionQuality: 0.92]
+        CGImageDestinationAddImage(dest, outputCG, options as CFDictionary)
+        guard CGImageDestinationFinalize(dest) else {
+            log.error("Photo watermark: finalize failed")
+            return jpegData
+        }
+
+        return outputData as Data
+    }
+
+    // MARK: - Photo Positioning
+
+    /// Simple corner positioning in portrait (no rotation needed for photos).
+    private static func photoPosition(for corner: WatermarkSettings.Corner,
+                                       textW: CGFloat, textH: CGFloat,
+                                       imageW: CGFloat, imageH: CGFloat,
+                                       padding: CGFloat) -> CGPoint {
+        switch corner {
+        case .topLeading:     return CGPoint(x: padding, y: imageH - textH - padding)
+        case .topTrailing:    return CGPoint(x: imageW - textW - padding, y: imageH - textH - padding)
+        case .bottomLeading:  return CGPoint(x: padding, y: padding)
+        case .bottomTrailing: return CGPoint(x: imageW - textW - padding, y: padding)
+        }
+    }
+
     // MARK: - Text Rendering
 
-    /// Renders the watermark text into a CGImage using UIKit.
-    /// The resulting image has the text rendered horizontally with padding.
-    private static func renderTextCG(settings: WatermarkSettings) -> CGImage? {
-        let paragraphStyle = NSMutableParagraphStyle()
-        paragraphStyle.alignment = .left
-
-        let attrs: [NSAttributedString.Key: Any] = [
-            .font: UIFont.systemFont(ofSize: settings.fontSize, weight: .semibold),
-            .foregroundColor: UIColor.white.withAlphaComponent(CGFloat(settings.opacity)),
-            .paragraphStyle: paragraphStyle
-        ]
-        let attrStr = NSAttributedString(string: settings.text, attributes: attrs)
+    /// Renders a pre-built attributed string (text + inline logo) into a CGImage.
+    /// Supports optional drop shadow for readability.
+    private static func renderAttributedText(_ attrStr: NSAttributedString,
+                                              opacity: Double,
+                                              shadow: Bool) -> CGImage? {
         let textSize = attrStr.size()
-        let size = CGSize(width: textSize.width + padding * 2, height: textSize.height + padding * 2)
+        let shadowOffset: CGFloat = shadow ? ceil(textSize.height * 0.04) : 0
+        let totalSize = CGSize(
+            width: textSize.width + padding * 2 + shadowOffset,
+            height: textSize.height + padding * 2 + shadowOffset
+        )
 
         let fmt = UIGraphicsImageRendererFormat()
         fmt.scale = 1
         fmt.opaque = false
-        return UIGraphicsImageRenderer(size: size, format: fmt).image { ctx in
-            attrStr.draw(at: CGPoint(x: padding, y: padding))
+
+        return UIGraphicsImageRenderer(size: totalSize, format: fmt).image { ctx in
+            let drawOrigin = CGPoint(x: padding, y: padding)
+
+            if shadow {
+                let shadowMutable = NSMutableAttributedString(attributedString: attrStr)
+                shadowMutable.enumerateAttributes(in: NSRange(location: 0, length: shadowMutable.length)) { attrs, range, _ in
+                    var newAttrs = attrs
+                    if let color = attrs[.foregroundColor] as? UIColor {
+                        var r: CGFloat = 0, g: CGFloat = 0, b: CGFloat = 0, a: CGFloat = 0
+                        color.getRed(&r, green: &g, blue: &b, alpha: &a)
+                        newAttrs[.foregroundColor] = UIColor.black.withAlphaComponent(a * 0.5)
+                    } else {
+                        newAttrs[.foregroundColor] = UIColor.black.withAlphaComponent(0.5)
+                    }
+                    shadowMutable.setAttributes(newAttrs, range: range)
+                }
+                shadowMutable.draw(at: CGPoint(x: drawOrigin.x + shadowOffset,
+                                               y: drawOrigin.y + shadowOffset))
+            }
+
+            // Apply opacity to main text
+            let mainMutable = NSMutableAttributedString(attributedString: attrStr)
+            mainMutable.enumerateAttributes(in: NSRange(location: 0, length: mainMutable.length)) { attrs, range, _ in
+                var newAttrs = attrs
+                if let color = attrs[.foregroundColor] as? UIColor {
+                    var r: CGFloat = 0, g: CGFloat = 0, b: CGFloat = 0, a: CGFloat = 0
+                    color.getRed(&r, green: &g, blue: &b, alpha: &a)
+                    newAttrs[.foregroundColor] = UIColor(red: r, green: g, blue: b, alpha: a * CGFloat(opacity))
+                } else {
+                    newAttrs[.foregroundColor] = UIColor.white.withAlphaComponent(CGFloat(opacity))
+                }
+                mainMutable.setAttributes(newAttrs, range: range)
+            }
+            mainMutable.draw(at: drawOrigin)
         }.cgImage
     }
 

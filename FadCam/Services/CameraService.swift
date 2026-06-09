@@ -196,7 +196,7 @@ extension CameraService: AVCaptureVideoDataOutputSampleBufferDelegate, AVCapture
 
         let shouldMirrorCamera = currentCamera == .front && isFrontRecordingMirrored
         let wmSettings = WatermarkSettings.shared
-        guard shouldMirrorCamera || (wmSettings.enabled && !wmSettings.text.isEmpty) else {
+        guard shouldMirrorCamera || wmSettings.isWatermarkShown else {
             recorder.appendVideo(sampleBuffer)
             return
         }
@@ -332,8 +332,13 @@ extension CameraService: AVCapturePhotoCaptureDelegate {
         formatter.dateFormat = "yyyyMMdd_HHmmss"
         let filename = "FadShot_\(formatter.string(from: Date())).jpg"
         let url = dir.appendingPathComponent(filename)
+
+        // Apply watermark if enabled
+        let wmSettings = WatermarkSettings.shared
+        let outputData = WatermarkRenderer.buildWatermarkedPhoto(jpegData: data, settings: wmSettings) ?? data
+
         do {
-            try data.write(to: url)
+            try outputData.write(to: url)
             photoCompletion?(.success(url))
         } catch {
             photoCompletion?(.failure(error))
