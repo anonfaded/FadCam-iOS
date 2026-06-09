@@ -12,6 +12,7 @@ final class CameraViewModel: NSObject, ObservableObject {
     @Published var isPermissionGranted = false
     @Published var isAudioPermissionGranted = false
     @Published var isPhotoPermissionGranted = false
+    @AppStorage("saveToPhotos") var saveToPhotos = false
     @Published var errorMessage: String?
     @Published var isPreviewActive = false
     @Published var isBatterySaverActive = false
@@ -221,7 +222,7 @@ final class CameraViewModel: NSObject, ObservableObject {
     }
 
     func saveToPhotos(url: URL) {
-        guard isPhotoPermissionGranted else { return }
+        guard isPhotoPermissionGranted, saveToPhotos else { return }
         cameraService.saveToPhotos(url: url)
     }
 
@@ -232,7 +233,7 @@ final class CameraViewModel: NSObject, ObservableObject {
                 guard let self else { return }
                 switch result {
                 case .success(let url):
-                    if self.isPhotoPermissionGranted {
+                    if self.isPhotoPermissionGranted, self.saveToPhotos {
                         self.cameraService.saveToPhotos(url: url)
                     }
                     self.refreshStorage()
@@ -297,7 +298,7 @@ final class CameraViewModel: NSObject, ObservableObject {
                         self.stopSession()
                         self.previewAutoStarted = false
                     }
-                    if self.isPhotoPermissionGranted {
+                    if self.isPhotoPermissionGranted, self.saveToPhotos {
                         self.cameraService.saveToPhotos(url: savedURL)
                     }
                     self.refreshStorage()

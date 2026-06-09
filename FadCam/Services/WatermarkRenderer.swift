@@ -179,55 +179,51 @@ enum WatermarkRenderer {
     // MARK: - Text Rendering
 
     /// Renders a pre-built attributed string (text + inline logo) into a CGImage.
-    /// Supports optional drop shadow for readability.
+    /// Drop shadow is applied via NSShadow attribute so it only affects text,
+    /// never the logo attachment.
     private static func renderAttributedText(_ attrStr: NSAttributedString,
                                               opacity: Double,
                                               shadow: Bool) -> CGImage? {
         let textSize = attrStr.size()
-        let shadowOffset: CGFloat = shadow ? ceil(textSize.height * 0.04) : 0
         let totalSize = CGSize(
-            width: textSize.width + padding * 2 + shadowOffset,
-            height: textSize.height + padding * 2 + shadowOffset
+            width: textSize.width + padding * 2,
+            height: textSize.height + padding * 2
         )
 
         let fmt = UIGraphicsImageRendererFormat()
         fmt.scale = 1
         fmt.opaque = false
 
-        return UIGraphicsImageRenderer(size: totalSize, format: fmt).image { ctx in
-            let drawOrigin = CGPoint(x: padding, y: padding)
+        // Build one final string — text gets opacity + optional shadow, logo stays crisp
+        let final = NSMutableAttributedString(attributedString: attrStr)
+        let full = NSRange(location: 0, length: final.length)
 
-            if shadow {
-                let shadowMutable = NSMutableAttributedString(attributedString: attrStr)
-                shadowMutable.enumerateAttributes(in: NSRange(location: 0, length: shadowMutable.length)) { attrs, range, _ in
-                    var newAttrs = attrs
-                    if let color = attrs[.foregroundColor] as? UIColor {
-                        var r: CGFloat = 0, g: CGFloat = 0, b: CGFloat = 0, a: CGFloat = 0
-                        color.getRed(&r, green: &g, blue: &b, alpha: &a)
-                        newAttrs[.foregroundColor] = UIColor.black.withAlphaComponent(a * 0.5)
-                    } else {
-                        newAttrs[.foregroundColor] = UIColor.black.withAlphaComponent(0.5)
-                    }
-                    shadowMutable.setAttributes(newAttrs, range: range)
-                }
-                shadowMutable.draw(at: CGPoint(x: drawOrigin.x + shadowOffset,
-                                               y: drawOrigin.y + shadowOffset))
+        if shadow {
+            let nsShadow = NSShadow()
+            nsShadow.shadowColor = UIColor.black.withAlphaComponent(0.5)
+            nsShadow.shadowOffset = CGSize(width: 1, height: 1)
+            nsShadow.shadowBlurRadius = 1.5
+            // Apply only to text ranges (skip attachment ranges)
+            final.enumerateAttributes(in: full, options: []) { attrs, range, _ in
+                if attrs[.attachment] != nil { return }
+                final.addAttribute(.shadow, value: nsShadow, range: range)
             }
+        }
 
-            // Apply opacity to main text
-            let mainMutable = NSMutableAttributedString(attributedString: attrStr)
-            mainMutable.enumerateAttributes(in: NSRange(location: 0, length: mainMutable.length)) { attrs, range, _ in
-                var newAttrs = attrs
-                if let color = attrs[.foregroundColor] as? UIColor {
-                    var r: CGFloat = 0, g: CGFloat = 0, b: CGFloat = 0, a: CGFloat = 0
-                    color.getRed(&r, green: &g, blue: &b, alpha: &a)
-                    newAttrs[.foregroundColor] = UIColor(red: r, green: g, blue: b, alpha: a * CGFloat(opacity))
-                } else {
-                    newAttrs[.foregroundColor] = UIColor.white.withAlphaComponent(CGFloat(opacity))
-                }
-                mainMutable.setAttributes(newAttrs, range: range)
+        // Apply opacity to text ranges only (logo stays at full alpha)
+        final.enumerateAttributes(in: full, options: []) { attrs, range, _ in
+            guard attrs[.attachment] == nil else { return }
+            if let c = attrs[.foregroundColor] as? UIColor {
+                var r: CGFloat = 0, g: CGFloat = 0, b: CGFloat = 0, a: CGFloat = 0
+                c.getRed(&r, green: &g, blue: &b, alpha: &a)
+                final.addAttribute(.foregroundColor,
+                    value: UIColor(red: r, green: g, blue: b, alpha: a * CGFloat(opacity)),
+                    range: range)
             }
-            mainMutable.draw(at: drawOrigin)
+        }
+
+        return UIGraphicsImageRenderer(size: totalSize, format: fmt).image { _ in
+            final.draw(at: CGPoint(x: padding, y: padding))
         }.cgImage
     }
 

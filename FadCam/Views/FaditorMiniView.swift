@@ -9,19 +9,11 @@ struct FaditorMiniView: View {
 
                 Image(systemName: "film.stack")
                     .font(.system(size: 56))
-                    .foregroundStyle(
-                        LinearGradient(colors: [.red, .orange],
-                                       startPoint: .leading,
-                                       endPoint: .trailing)
-                    )
+                    .foregroundColor(.green)
 
                 Text("Faditor Mini")
                     .font(.system(size: 28, weight: .bold, design: .rounded))
-                    .foregroundStyle(
-                        LinearGradient(colors: [.red, .orange],
-                                       startPoint: .leading,
-                                       endPoint: .trailing)
-                    )
+                    .foregroundColor(.green)
 
                 Text("Video Editor — Coming Soon")
                     .font(.title3)
@@ -35,8 +27,11 @@ struct FaditorMiniView: View {
 
                 Spacer()
             }
+            .navigationTitle("Faditor Mini")
+            .navigationBarTitleDisplayMode(.large)
         }
         .navigationViewStyle(.stack)
+        .tint(.green)
     }
 }
 

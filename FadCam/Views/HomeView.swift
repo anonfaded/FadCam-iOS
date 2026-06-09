@@ -791,11 +791,17 @@ struct HomeView: View {
     private var watermarkText: some View {
         let fs = fontSizeForPreview
         let hasTs = watermarkSettings.showTimestamp
-        let logoHeight = fs * 1.3
+        let logoHeight = fs * WatermarkSettings.logoToFontRatio
 
         return HStack(spacing: 2) {
             Text(WatermarkSettings.brandPrefix)
                 .font(.system(size: fs, weight: .semibold))
+                .shadow(
+                    color: watermarkSettings.shadowEnabled ? .black.opacity(0.5) : .clear,
+                    radius: watermarkSettings.shadowEnabled ? 1.5 : 0,
+                    x: watermarkSettings.shadowEnabled ? 1 : 0,
+                    y: watermarkSettings.shadowEnabled ? 1 : 0
+                )
 
             if let logo = UIImage(named: "HeaderLogo") {
                 let ratio = logo.size.width / logo.size.height
@@ -805,23 +811,20 @@ struct HomeView: View {
                     .aspectRatio(contentMode: .fit)
                     .frame(height: logoHeight)
                     .frame(width: logoW)
-            } else {
-                Text("FadCam")
-                    .font(.system(size: fs, weight: .bold))
             }
 
             if hasTs {
                 Text(" - " + timestampForPreview)
                     .font(.system(size: fs, weight: .regular))
+                    .shadow(
+                        color: watermarkSettings.shadowEnabled ? .black.opacity(0.5) : .clear,
+                        radius: watermarkSettings.shadowEnabled ? 1.5 : 0,
+                        x: watermarkSettings.shadowEnabled ? 1 : 0,
+                        y: watermarkSettings.shadowEnabled ? 1 : 0
+                    )
             }
         }
         .foregroundColor(.white.opacity(watermarkSettings.opacity))
-        .shadow(
-            color: watermarkSettings.shadowEnabled ? .black.opacity(0.5) : .clear,
-            radius: watermarkSettings.shadowEnabled ? 1.5 : 0,
-            x: watermarkSettings.shadowEnabled ? 1 : 0,
-            y: watermarkSettings.shadowEnabled ? 1 : 0
-        )
         .padding(.horizontal, 8)
         .padding(.vertical, 3)
     }

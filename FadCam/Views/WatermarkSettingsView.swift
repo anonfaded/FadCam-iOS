@@ -97,11 +97,8 @@ struct WatermarkSettingsView: View {
                 } header: {
                     Text("Appearance")
                 } footer: {
-                    HStack(spacing: 4) {
-                        Image(systemName: "arrow.counterclockwise")
-                            .font(.system(size: 10))
-                        Text("Tap to reset any setting to its default.  A drop shadow helps readability on bright scenes.")
-                    }
+                    (Text(Image(systemName: "arrow.counterclockwise")).font(.system(size: 10))
+                     + Text(" Tap to reset any setting to its default.  A drop shadow helps readability on bright scenes."))
                     .font(.caption)
                     .foregroundColor(.secondary)
                 }
@@ -113,6 +110,32 @@ struct WatermarkSettingsView: View {
         .onReceive(timer) { _ in
             previewTimestamp = Date()
         }
+        .onAppear { setTabBar(hidden: true) }
+        .onDisappear { setTabBar(hidden: false) }
+    }
+
+    // MARK: - Tab Bar
+
+    /// Walks the responder chain from the root window to find the UITabBarController
+    /// and shows/hides its tab bar. Works around the nested-NavigationView limitation.
+    private func setTabBar(hidden: Bool) {
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.05) {
+            guard let windowScene = UIApplication.shared.connectedScenes.first as? UIWindowScene,
+                  let rootVC = windowScene.windows.first?.rootViewController else { return }
+            // Recursively search for UITabBarController in the VC hierarchy
+            if let tabVC = findTabBarController(from: rootVC) {
+                tabVC.tabBar.isHidden = hidden
+            }
+        }
+    }
+
+    private func findTabBarController(from vc: UIViewController) -> UITabBarController? {
+        if let tab = vc as? UITabBarController { return tab }
+        if let tab = vc.tabBarController { return tab }
+        for child in vc.children {
+            if let found = findTabBarController(from: child) { return found }
+        }
+        return nil
     }
 
     // MARK: - Live Preview Card
@@ -183,14 +206,18 @@ struct WatermarkSettingsView: View {
     private var previewWatermarkLabel: some View {
         let fs = previewFontSize
         let hasTs = settings.mode == .textWithTimestamp
-        let logoHeight = fs * 1.3
+        let logoHeight = fs * WatermarkSettings.logoToFontRatio
 
         return HStack(spacing: 2) {
-            // "Captured by " text
             Text(WatermarkSettings.brandPrefix)
                 .font(.system(size: fs, weight: .semibold))
+                .shadow(
+                    color: settings.shadowEnabled ? .black.opacity(0.5) : .clear,
+                    radius: settings.shadowEnabled ? 1.5 : 0,
+                    x: settings.shadowEnabled ? 1 : 0,
+                    y: settings.shadowEnabled ? 1 : 0
+                )
 
-            // Logo image — properly sized
             if let logo = UIImage(named: "HeaderLogo") {
                 let ratio = logo.size.width / logo.size.height
                 let logoW = logoHeight * ratio
@@ -199,24 +226,20 @@ struct WatermarkSettingsView: View {
                     .aspectRatio(contentMode: .fit)
                     .frame(height: logoHeight)
                     .frame(width: logoW)
-            } else {
-                Text("FadCam")
-                    .font(.system(size: fs, weight: .bold))
             }
 
-            // Timestamp (driven by mode, refreshes every second)
             if hasTs {
                 Text(" - " + timestampString)
                     .font(.system(size: fs, weight: .regular))
+                    .shadow(
+                        color: settings.shadowEnabled ? .black.opacity(0.5) : .clear,
+                        radius: settings.shadowEnabled ? 1.5 : 0,
+                        x: settings.shadowEnabled ? 1 : 0,
+                        y: settings.shadowEnabled ? 1 : 0
+                    )
             }
         }
         .foregroundColor(.white.opacity(settings.opacity))
-        .shadow(
-            color: settings.shadowEnabled ? .black.opacity(0.5) : .clear,
-            radius: settings.shadowEnabled ? 1.5 : 0,
-            x: settings.shadowEnabled ? 1 : 0,
-            y: settings.shadowEnabled ? 1 : 0
-        )
     }
 
     private var timestampString: String {
@@ -226,7 +249,7 @@ struct WatermarkSettingsView: View {
     }
 
     private var previewFontSize: CGFloat {
-        max(8, settings.fontSize * 0.28)
+        settings.fontSize * 0.5
     }
 
     // MARK: - Mode Picker

@@ -1,6 +1,7 @@
 import SwiftUI
 import Combine
 import Foundation
+import UIKit
 
 /// Persisted watermark configuration. Backed by UserDefaults.
 final class WatermarkSettings: ObservableObject {
@@ -67,6 +68,10 @@ final class WatermarkSettings: ObservableObject {
     /// Whether a live timestamp should be appended (derived from mode).
     var showTimestamp: Bool { mode == .textWithTimestamp }
 
+    /// Logo height relative to font size — shared constant for consistency
+    /// across recorded video, FadShot photos, and all previews.
+    static let logoToFontRatio: CGFloat = 2.2
+
     /// Builds the full watermark as an attributed string with inline FadCam logo.
     /// Text Only: "Captured by [logo]"
     /// Text + Timestamp: "Captured by [logo] - 9 June 2026, 11:45:30 AM"
@@ -80,15 +85,18 @@ final class WatermarkSettings: ObservableObject {
         ]
         result.append(NSAttributedString(string: Self.brandPrefix, attributes: prefixAttrs))
 
-        // Inline logo image
+        // Inline logo image — pre-scaled for crisp rendering
         if let logo = UIImage(named: "HeaderLogo") {
+            let logoHeight = fontSize * Self.logoToFontRatio
             let ratio = logo.size.height / logo.size.width
-            let logoHeight = fontSize * 2.2
             let logoWidth = logoHeight / ratio
+            let pixelHeight = logoHeight * 2  // 2x retina-sharp
+            let pixelWidth = pixelHeight / ratio
+            let scaledLogo = logo.resized(to: CGSize(width: pixelWidth, height: pixelHeight))
             let attachment = NSTextAttachment()
-            attachment.image = logo.withRenderingMode(.alwaysOriginal)
+            attachment.image = scaledLogo.withRenderingMode(.alwaysOriginal)
             attachment.bounds = CGRect(x: 0,
-                                        y: (fontSize - logoHeight) / 2 - fontSize * 0.15,
+                                        y: (fontSize - logoHeight) / 2 - fontSize * 0.18,
                                         width: logoWidth,
                                         height: logoHeight)
             result.append(NSAttributedString(attachment: attachment))
@@ -146,5 +154,17 @@ final class WatermarkSettings: ObservableObject {
         self.opacity       = defaults.object(forKey: Key.opacity) as? Double ?? Self.defaultOpacity
         self.corner        = Corner(rawValue: defaults.string(forKey: Key.corner) ?? Self.defaultCorner.rawValue) ?? Self.defaultCorner
         self.shadowEnabled = defaults.object(forKey: Key.shadowEnabled) as? Bool ?? Self.defaultShadow
+    }
+}
+
+// MARK: - UIImage Resize Helper
+
+extension UIImage {
+    /// Returns a new image resized to the target size using high-quality Lanczos scaling.
+    func resized(to size: CGSize) -> UIImage {
+        let renderer = UIGraphicsImageRenderer(size: size)
+        return renderer.image { _ in
+            self.draw(in: CGRect(origin: .zero, size: size))
+        }
     }
 }
