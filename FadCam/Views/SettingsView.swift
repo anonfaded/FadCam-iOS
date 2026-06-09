@@ -5,11 +5,13 @@ struct SettingsView: View {
     @AppStorage("saveToPhotos") private var saveToPhotos = false
     @AppStorage("resumeOnboarding") private var resumeOnboarding = false
     @AppStorage("hasCompletedOnboarding") private var hasCompletedOnboarding = true
+    @StateObject private var watermarkSettings = WatermarkSettings.shared
     @State private var showingAlert = false
     @State private var alertMessage = ""
     @State private var showGitHubLink = false
     @State private var showWebsiteLink = false
     @State private var showTrash = false
+    @State private var watermarkTextInput = ""
 
     var body: some View {
         NavigationView {
@@ -38,6 +40,46 @@ struct SettingsView: View {
                 } header: { Text("Onboarding") }
                 footer: { Text("Toggle ON to show onboarding on next app launch. Toggle OFF to cancel.") }
 
+                // MARK: — Watermark
+                Section {
+                    Toggle(isOn: $watermarkSettings.enabled) {
+                        Label("Watermark", systemImage: "text.word.spacing")
+                    }
+                    .tint(.red)
+
+                    if watermarkSettings.enabled {
+                        TextField("Watermark text", text: $watermarkTextInput)
+                            .onAppear { watermarkTextInput = watermarkSettings.text }
+                            .onSubmit { watermarkSettings.text = watermarkTextInput }
+
+                        HStack {
+                            Text("Font Size")
+                            Slider(value: $watermarkSettings.fontSize, in: 24...96, step: 4)
+                            Text("\(Int(watermarkSettings.fontSize))pt")
+                                .font(.system(size: 12).monospacedDigit())
+                                .foregroundColor(.secondary)
+                                .frame(width: 38, alignment: .trailing)
+                        }
+
+                        HStack {
+                            Text("Opacity")
+                            Slider(value: $watermarkSettings.opacity, in: 0.1...1.0, step: 0.05)
+                            Text("\(Int(watermarkSettings.opacity * 100))%")
+                                .font(.system(size: 12).monospacedDigit())
+                                .foregroundColor(.secondary)
+                                .frame(width: 38, alignment: .trailing)
+                        }
+
+                        Picker("Position", selection: $watermarkSettings.corner) {
+                            ForEach(WatermarkSettings.Corner.allCases) { corner in
+                                Text(corner.rawValue).tag(corner)
+                            }
+                        }
+                    }
+                } header: { Text("Watermark") }
+                footer: { Text("Adds 'Captured by FadCam' to recorded videos and live preview.") }
+
+                // MARK: — Information
                 Section {
                     Button {
                         showGitHubLink = true

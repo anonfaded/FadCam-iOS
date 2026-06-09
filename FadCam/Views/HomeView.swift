@@ -50,6 +50,9 @@ struct HomeView: View {
     @State private var showWebsiteLink = false
     @AppStorage("previewAreaEnabled") private var previewAreaEnabled = true
 
+    // Watermark
+    @StateObject private var watermarkSettings = WatermarkSettings.shared
+
     // Sleeping avatar animations (matching Android AVD flow)
     @State private var breathingOpacity: Double = 0.80
     @State private var breathingScale: Double = 1.0
@@ -521,7 +524,7 @@ struct HomeView: View {
                                   isMirrored: cameraVM.currentCamera == .front && !cameraVM.isFrontFlipped)
                         .scaleEffect(cameraVM.zoomFactor)
 
-                    // Dark vignette overlay — ambient dim edges, no solid pillarbox
+                    // Dark vignette overlay
                     RadialGradient(
                         colors: [.clear, .clear, .clear, Color.black.opacity(0.35)],
                         center: .center,
@@ -529,6 +532,9 @@ struct HomeView: View {
                         endRadius: max(100, max(previewSize.width, previewSize.height))
                     )
                     .allowsHitTesting(false)
+
+                    // Live preview watermark — mirrors recorded watermark
+                    liveWatermarkView
                 }
                 .background(GeometryReader { geo in
                     Color.clear.onAppear { previewSize = geo.size }
@@ -755,6 +761,49 @@ struct HomeView: View {
     private func stopFloatingZ() {
         z1Float = 0; z2Float = 0; z3Float = 0
     }
+
+    // MARK: - Live Preview Watermark
+
+    /// Renders the same watermark on the live preview that gets recorded into the video.
+    private var liveWatermarkView: some View {
+        Group {
+            if watermarkSettings.enabled && !watermarkSettings.text.isEmpty {
+                VStack {
+                    if watermarkSettings.corner == .topLeading || watermarkSettings.corner == .topTrailing {
+                        HStack {
+                            if watermarkSettings.corner == .topLeading { watermarkText; Spacer() }
+                            else { Spacer(); watermarkText }
+                        }
+                        Spacer()
+                    } else {
+                        Spacer()
+                        HStack {
+                            if watermarkSettings.corner == .bottomLeading { watermarkText; Spacer() }
+                            else { Spacer(); watermarkText }
+                        }
+                    }
+                }
+                .allowsHitTesting(false)
+            }
+        }
+    }
+
+    private var watermarkText: some View {
+        Text(watermarkSettings.text)
+            .font(.system(size: fontSizeForPreview, weight: .semibold))
+            .foregroundColor(.white.opacity(watermarkSettings.opacity))
+            .padding(.horizontal, 10)
+            .padding(.vertical, 4)
+    }
+
+    /// Scale font size from recorded 1280-width to the preview area width.
+    private var fontSizeForPreview: CGFloat {
+        let recordedWidth: CGFloat = 1280
+        let scale = (previewSize.width > 0 ? previewSize.width : UIScreen.main.bounds.width) / recordedWidth
+        return watermarkSettings.fontSize * scale
+    }
+
+    // MARK: - Mascot
 
     private var mascotView: some View {
         ZStack {

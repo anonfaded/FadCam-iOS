@@ -23,6 +23,15 @@ class CameraService: NSObject {
 
     private(set) var currentCamera: AVCaptureDevice.Position = .back
 
+    // Watermark render pipeline
+    private var watermarkBufferPool: CVPixelBufferPool?
+    private var watermarkPoolWidth  = 0
+    private var watermarkPoolHeight = 0
+    private let watermarkContext = CIContext(options: [
+        .workingColorSpace: CGColorSpaceCreateDeviceRGB(),
+        .highQualityDownsample: true
+    ])
+
     override init() {
         super.init()
         session.sessionPreset = .high
@@ -42,6 +51,7 @@ class CameraService: NSObject {
         audioDeviceInput = nil
         videoDataOutput = nil
         audioDataOutput = nil
+        watermarkBufferPool = nil  // force re-creation on next frame
 
         guard let camera = AVCaptureDevice.default(.builtInWideAngleCamera, for: .video, position: position) else {
             throw CameraError.noCameraAvailable
@@ -97,6 +107,7 @@ class CameraService: NSObject {
         session.addInput(videoInput)
         videoDeviceInput = videoInput
         currentCamera = newPosition
+        watermarkBufferPool = nil  // force re-creation on next frame
     }
 
     func saveToPhotos(url: URL) {
@@ -167,11 +178,125 @@ class CameraService: NSObject {
 
 extension CameraService: AVCaptureVideoDataOutputSampleBufferDelegate, AVCaptureAudioDataOutputSampleBufferDelegate {
     func captureOutput(_ output: AVCaptureOutput, didOutput sampleBuffer: CMSampleBuffer, from connection: AVCaptureConnection) {
-        if output === videoDataOutput {
-            recorder.appendVideo(sampleBuffer)
-        } else if output === audioDataOutput {
-            recorder.appendAudio(sampleBuffer)
+        if output !== videoDataOutput {
+            if output === audioDataOutput { recorder.appendAudio(sampleBuffer) }
+            return
         }
+
+        let wmSettings = WatermarkSettings.shared
+        guard wmSettings.enabled, !wmSettings.text.isEmpty else {
+            recorder.appendVideo(sampleBuffer)
+            return
+        }
+
+        guard let pixelBuffer = CMSampleBufferGetImageBuffer(sampleBuffer) else {
+            recorder.appendVideo(sampleBuffer)
+            return
+        }
+
+        guard let composited = WatermarkRenderer.buildCompositedImage(
+            settings: wmSettings, from: pixelBuffer, cameraPosition: currentCamera) else {
+            log.info("Watermark: buildCompositedImage returned nil")
+            recorder.appendVideo(sampleBuffer)
+            return
+        }
+
+        guard let watermarkedBuf = renderToWritableBuffer(composited, template: pixelBuffer) else {
+            log.info("Watermark: renderToWritableBuffer returned nil")
+            recorder.appendVideo(sampleBuffer)
+            return
+        }
+
+        guard let newSB = createSampleBuffer(from: watermarkedBuf,
+                                              timingFrom: sampleBuffer,
+                                              copyExtensionsFrom: sampleBuffer) else {
+            log.info("Watermark: createSampleBuffer returned nil")
+            recorder.appendVideo(sampleBuffer)
+            return
+        }
+
+        recorder.appendVideo(newSB)
+    }
+
+    // MARK: - Watermark Buffer Pool
+
+    private func renderToWritableBuffer(_ image: CIImage, template: CVPixelBuffer) -> CVPixelBuffer? {
+        let w = CVPixelBufferGetWidth(template)
+        let h = CVPixelBufferGetHeight(template)
+        let fmt = CVPixelBufferGetPixelFormatType(template)
+
+        if watermarkBufferPool == nil || w != watermarkPoolWidth || h != watermarkPoolHeight {
+            let attrs: [String: Any] = [
+                kCVPixelBufferPixelFormatTypeKey as String: fmt,
+                kCVPixelBufferWidthKey as String: w,
+                kCVPixelBufferHeightKey as String: h,
+                kCVPixelBufferIOSurfacePropertiesKey as String: [:] as [String: Any],
+                kCVPixelBufferBytesPerRowAlignmentKey as String: 16
+            ]
+            var pool: CVPixelBufferPool?
+            CVPixelBufferPoolCreate(kCFAllocatorDefault, nil, attrs as CFDictionary, &pool)
+            guard let p = pool else { return nil }
+            watermarkBufferPool = p
+            watermarkPoolWidth = w
+            watermarkPoolHeight = h
+        }
+
+        var buf: CVPixelBuffer?
+        CVPixelBufferPoolCreatePixelBuffer(kCFAllocatorDefault, watermarkBufferPool!, &buf)
+        guard let buffer = buf else { return nil }
+
+        let cropped = image.cropped(to: CGRect(x: 0, y: 0, width: CGFloat(w), height: CGFloat(h)))
+        watermarkContext.render(cropped, to: buffer)
+        // Attachments are propagated in createSampleBuffer
+        return buffer
+    }
+
+    /// Creates a CMSampleBuffer from a watermarked pixel buffer.
+    /// Builds a fresh format description from the watermarked buffer —
+    /// CVBufferPropagateAttachments already copied extensions from the template.
+    private func createSampleBuffer(from pixelBuffer: CVPixelBuffer,
+                                     timingFrom original: CMSampleBuffer,
+                                     copyExtensionsFrom template: CMSampleBuffer) -> CMSampleBuffer? {
+        // Propagate pixel-level attachments BEFORE creating format description
+        if let templateBuf = CMSampleBufferGetImageBuffer(template) {
+            CVBufferPropagateAttachments(templateBuf, pixelBuffer)
+        }
+
+        var formatDesc: CMFormatDescription?
+        let fStatus = CMVideoFormatDescriptionCreateForImageBuffer(
+            allocator: kCFAllocatorDefault,
+            imageBuffer: pixelBuffer,
+            formatDescriptionOut: &formatDesc
+        )
+        guard fStatus == noErr, let desc = formatDesc else {
+            log.error("Watermark: CMVideoFormatDescriptionCreateForImageBuffer failed (\(fStatus))")
+            return nil
+        }
+
+        var timing = CMSampleTimingInfo()
+        CMSampleBufferGetSampleTimingInfo(original, at: 0, timingInfoOut: &timing)
+
+        var newSB: CMSampleBuffer?
+        let status = CMSampleBufferCreateForImageBuffer(
+            allocator: kCFAllocatorDefault,
+            imageBuffer: pixelBuffer,
+            dataReady: true,
+            makeDataReadyCallback: nil,
+            refcon: nil,
+            formatDescription: desc,
+            sampleTiming: &timing,
+            sampleBufferOut: &newSB
+        )
+        guard status == noErr, let sb = newSB else {
+            log.error("Watermark: CMSampleBufferCreateForImageBuffer failed (\(status))")
+            return nil
+        }
+
+        CMSetAttachment(sb,
+                        key: kCMSampleBufferAttachmentKey_DrainAfterDecoding as CFString,
+                        value: kCFBooleanFalse,
+                        attachmentMode: kCMAttachmentMode_ShouldPropagate)
+        return sb
     }
 }
 
