@@ -16,6 +16,9 @@ struct RecordsView: View {
     @State private var isSelectionMode = false
     @State private var selectedIDs = Set<UUID>()
     @State private var scrolledToTop = true
+    @State private var chipScrollOffset: CGFloat = 0
+    @State private var scrollViewWidth: CGFloat = 0
+    @State private var contentWidth: CGFloat = 0
 
     @AppStorage("records.sortOrder") private var storedSort = "newest"
     @AppStorage("records.viewMode") private var storedView = "grid"
@@ -377,33 +380,71 @@ struct RecordsView: View {
                 HStack(spacing: 8) {
                     ForEach(sortedFilters, id: \.id) { chipView($0) }
                 }
+                .fixedSize(horizontal: true, vertical: false)
+                .background(
+                    GeometryReader { contentProxy in
+                        Color.clear
+                            .preference(key: ContentWidthKey.self, value: contentProxy.size.width)
+                    }
+                )
             }
-            .mask(fadeMask)
+            .background(
+                GeometryReader { scrollProxy in
+                    Color.clear
+                        .preference(key: ScrollWidthKey.self, value: scrollProxy.size.width)
+                }
+            )
+            .coordinateSpace(name: "chip-scroll")
+            .background(
+                GeometryReader { offsetProxy in
+                    Color.clear
+                        .preference(
+                            key: ChipScrollOffsetKey.self,
+                            value: -offsetProxy.frame(in: .named("chip-scroll")).minX
+                        )
+                }
+            )
+            .onPreferenceChange(ContentWidthKey.self) { contentWidth = $0 }
+            .onPreferenceChange(ScrollWidthKey.self) { scrollViewWidth = $0 }
+            .onPreferenceChange(ChipScrollOffsetKey.self) { chipScrollOffset = $0 }
+            .mask(
+                GeometryReader { maskProxy in
+                    let canScrollLeft = chipScrollOffset > 4
+                    let canScrollRight = (chipScrollOffset + scrollViewWidth) < contentWidth - 4
+
+                    HStack(spacing: 0) {
+                        LinearGradient(
+                            stops: [
+                                .init(color: .black, location: 0),
+                                .init(color: .black, location: 1)
+                            ],
+                            startPoint: .leading, endPoint: .trailing
+                        )
+                        .frame(width: canScrollLeft ? 20 : 0)
+                        .opacity(canScrollLeft ? 1 : 0)
+                        .animation(.easeInOut(duration: 0.2), value: canScrollLeft)
+
+                        Color.black
+
+                        LinearGradient(
+                            stops: [
+                                .init(color: .black, location: 0),
+                                .init(color: .black, location: 1)
+                            ],
+                            startPoint: .leading, endPoint: .trailing
+                        )
+                        .frame(width: canScrollRight ? 20 : 0)
+                        .opacity(canScrollRight ? 1 : 0)
+                        .animation(.easeInOut(duration: 0.2), value: canScrollRight)
+                    }
+                    .frame(width: maskProxy.size.width, height: maskProxy.size.height)
+                }
+            )
 
             sortButton
             viewModeButton
         }
         .padding(.horizontal, 16)
-    }
-
-    private var fadeMask: some View {
-        HStack(spacing: 0) {
-            LinearGradient(
-                gradient: Gradient(colors: [.clear, .black]),
-                startPoint: .leading,
-                endPoint: .trailing
-            )
-            .frame(width: 20)
-
-            Color.white
-
-            LinearGradient(
-                gradient: Gradient(colors: [.black, .clear]),
-                startPoint: .leading,
-                endPoint: .trailing
-            )
-            .frame(width: 20)
-        }
     }
 
     private var subFilterRow: some View {
@@ -765,6 +806,21 @@ struct RecordsView: View {
 }
 
 struct ScrollOffsetKey: PreferenceKey {
+    static var defaultValue: CGFloat = 0
+    static func reduce(value: inout CGFloat, nextValue: () -> CGFloat) { value = nextValue() }
+}
+
+struct ChipScrollOffsetKey: PreferenceKey {
+    static var defaultValue: CGFloat = 0
+    static func reduce(value: inout CGFloat, nextValue: () -> CGFloat) { value = nextValue() }
+}
+
+struct ContentWidthKey: PreferenceKey {
+    static var defaultValue: CGFloat = 0
+    static func reduce(value: inout CGFloat, nextValue: () -> CGFloat) { value = nextValue() }
+}
+
+struct ScrollWidthKey: PreferenceKey {
     static var defaultValue: CGFloat = 0
     static func reduce(value: inout CGFloat, nextValue: () -> CGFloat) { value = nextValue() }
 }
