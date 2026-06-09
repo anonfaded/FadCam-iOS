@@ -22,10 +22,10 @@ final class VideoRecorder: @unchecked Sendable {
 
     var isRecording: Bool { hasStartedSession }
 
-    func start(to url: URL, cameraPosition: AVCaptureDevice.Position = .back) throws {
+    func start(to url: URL) throws {
         try writeQueue.sync {
             if hasStartedSession { throw RecorderError.alreadyRecording }
-            try startWriterSync(url: url, cameraPosition: cameraPosition)
+            try startWriterSync(url: url)
             hasStartedSession = true
             sessionStarted = false
             log.info("Recording started to \(url.lastPathComponent)")
@@ -98,7 +98,7 @@ final class VideoRecorder: @unchecked Sendable {
         writeQueue.async(execute: workItem)
     }
 
-    private func startWriterSync(url: URL, cameraPosition: AVCaptureDevice.Position) throws {
+    private func startWriterSync(url: URL) throws {
         outputURL = url
         try? FileManager.default.removeItem(at: url)
         let writer: AVAssetWriter
@@ -111,12 +111,9 @@ final class VideoRecorder: @unchecked Sendable {
         ]
         let vInput = AVAssetWriterInput(mediaType: .video, outputSettings: videoSettings)
         vInput.expectsMediaDataInRealTime = true
-        let rotationAngle: CGFloat = cameraPosition == .front ? -.pi / 2 : .pi / 2
-        var t = CGAffineTransform(rotationAngle: rotationAngle)
-        if cameraPosition == .front {
-            t = CGAffineTransform(scaleX: -1, y: 1).rotated(by: rotationAngle)
-        }
-        vInput.transform = t
+        // Camera sample buffers are landscape. Both cameras use the same
+        // portrait display transform; front mirroring happens before encoding.
+        vInput.transform = CGAffineTransform(rotationAngle: .pi / 2)
         let audioSettings: [String: Any] = [
             AVFormatIDKey: kAudioFormatMPEG4AAC,
             AVNumberOfChannelsKey: 1,

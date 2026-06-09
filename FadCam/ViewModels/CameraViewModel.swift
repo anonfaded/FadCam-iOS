@@ -263,7 +263,7 @@ final class CameraViewModel: NSObject, ObservableObject {
         let url = recordingURL
         try? FileManager.default.createDirectory(at: url.deletingLastPathComponent(), withIntermediateDirectories: true)
         do {
-            try cameraService.recorder.start(to: url, cameraPosition: currentCamera)
+            try cameraService.recorder.start(to: url)
         } catch {
             log.error("Failed to start recorder: \(error.localizedDescription)")
             errorMessage = "Failed to start recorder: \(error.localizedDescription)"

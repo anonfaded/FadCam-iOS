@@ -18,13 +18,8 @@ private let log = Logger(subsystem: "com.fadseclab.fadcam", category: "watermark
 /// - **Display (portrait video)**: origin at top-left.  This is what the player shows.
 ///
 /// ## Back Camera
-/// Writer transform = rotate(+π/2) CW.
-/// Mapping: CI (0,0) → portrait top-left, CI (W,0) → portrait bottom-left,
-///          CI (0,H) → portrait top-right, CI (W,H) → portrait bottom-right.
-///
-/// ## Front Camera
-/// Writer transform = scaleX(-1).rotated(by: -π/2), which equals (x,y)→(y,x).
-/// Self-inverse.  Mapping: CI (0,H) → portrait top-left.
+/// Writer transform = rotate(+π/2). After the player normalizes its negative
+/// bounds, the same transform and corner mapping applies to both cameras.
 enum WatermarkRenderer {
 
     private static let padding: CGFloat = 24
@@ -35,11 +30,9 @@ enum WatermarkRenderer {
     /// - Parameters:
     ///   - settings: Watermark configuration (text, size, opacity, corner).
     ///   - pixelBuffer: The raw camera frame in landscape orientation.
-    ///   - cameraPosition: `.back` or `.front` — determines pre-rotation direction.
     /// - Returns: A new CIImage with the watermark composited, or nil on failure.
     static func buildCompositedImage(settings: WatermarkSettings,
-                                      from pixelBuffer: CVPixelBuffer,
-                                      cameraPosition: AVCaptureDevice.Position) -> CIImage? {
+                                      from pixelBuffer: CVPixelBuffer) -> CIImage? {
         guard settings.enabled, !settings.text.isEmpty else { return nil }
 
         let background = CIImage(cvPixelBuffer: pixelBuffer)
@@ -53,8 +46,7 @@ enum WatermarkRenderer {
         let transform = watermarkTransform(
             for: settings.corner,
             textSize: textSize,
-            landscapeExtent: ext,
-            cameraPosition: cameraPosition
+            landscapeExtent: ext
         )
         wm = wm.transformed(by: transform)
 
@@ -116,8 +108,7 @@ enum WatermarkRenderer {
     private static func watermarkTransform(
         for corner: WatermarkSettings.Corner,
         textSize: CGSize,
-        landscapeExtent: CGRect,
-        cameraPosition: AVCaptureDevice.Position
+        landscapeExtent: CGRect
     ) -> CGAffineTransform {
         let tw = textSize.width
         let th = textSize.height
@@ -127,15 +118,8 @@ enum WatermarkRenderer {
         // Step 1: Move center of text to origin
         let toOrigin = CGAffineTransform(translationX: -tw / 2, y: -th / 2)
 
-        // Step 2: Pre-rotation — inverse of the writer's transform
-        // Back camera writer = rotate(+π/2) CW in y-down → CI pre-rotate +π/2 CCW.
-        // Front camera writer = (x,y)→(y,x) swap in y-down → same swap as pre-transform.
-        let preRotation: CGAffineTransform
-        if cameraPosition == .front {
-            preRotation = CGAffineTransform(scaleX: -1, y: 1).rotated(by: -.pi / 2)
-        } else {
-            preRotation = CGAffineTransform(rotationAngle: .pi / 2)
-        }
+        // Step 2: Pre-rotate so text reads horizontally after writer rotation.
+        let preRotation = CGAffineTransform(rotationAngle: .pi / 2)
 
         // Concatenate: toOrigin applied FIRST, then preRotation
         // A.concatenating(B) = B·A, applies A first then B
@@ -154,8 +138,7 @@ enum WatermarkRenderer {
             rotatedWidth: rotatedW,
             rotatedHeight: rotatedH,
             landscapeW: lw,
-            landscapeH: lh,
-            cameraPosition: cameraPosition
+            landscapeH: lh
         )
         let landscapeTranslation = CGAffineTransform(translationX: cx, y: cy)
         return rotated.concatenating(landscapeTranslation)
@@ -174,42 +157,17 @@ enum WatermarkRenderer {
         rotatedWidth rw: CGFloat,
         rotatedHeight rh: CGFloat,
         landscapeW lw: CGFloat,
-        landscapeH lh: CGFloat,
-        cameraPosition: AVCaptureDevice.Position
+        landscapeH lh: CGFloat
     ) -> (CGFloat, CGFloat) {
-
-        if cameraPosition == .front {
-            // Writer T = (x,y)→(y,x), self-inverse.
-            // CI (0, lh) = landscape top-left     → portrait top-left.
-            // CI (0, 0)  = landscape bottom-left  → portrait top-right.
-            // CI (lw, lh)= landscape top-right    → portrait bottom-left.
-            // CI (lw, 0) = landscape bottom-right → portrait bottom-right.
-            switch corner {
-            case .topLeading:
-                return (padding + rw / 2, lh - padding - rh / 2)
-            case .topTrailing:
-                return (padding + rw / 2, padding + rh / 2)
-            case .bottomLeading:
-                return (lw - padding - rw / 2, lh - padding - rh / 2)
-            case .bottomTrailing:
-                return (lw - padding - rw / 2, padding + rh / 2)
-            }
-        } else {
-            // Writer T = rotate(+π/2) CW.
-            // CI (0, 0)  = landscape bottom-left  → portrait top-left.
-            // CI (lw, 0) = landscape bottom-right → portrait bottom-left.
-            // CI (0, lh) = landscape top-left     → portrait top-right.
-            // CI (lw, lh)= landscape top-right    → portrait bottom-right.
-            switch corner {
-            case .topLeading:
-                return (padding + rw / 2, padding + rh / 2)
-            case .topTrailing:
-                return (padding + rw / 2, lh - padding - rh / 2)
-            case .bottomLeading:
-                return (lw - padding - rw / 2, padding + rh / 2)
-            case .bottomTrailing:
-                return (lw - padding - rw / 2, lh - padding - rh / 2)
-            }
+        switch corner {
+        case .topLeading:
+            return (padding + rw / 2, padding + rh / 2)
+        case .topTrailing:
+            return (padding + rw / 2, lh - padding - rh / 2)
+        case .bottomLeading:
+            return (lw - padding - rw / 2, padding + rh / 2)
+        case .bottomTrailing:
+            return (lw - padding - rw / 2, lh - padding - rh / 2)
         }
     }
 }

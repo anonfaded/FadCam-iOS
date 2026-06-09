@@ -99,6 +99,13 @@
 - Recording saved to `Documents/FadCam/{Back,Front}/`
 - Screenshots saved to `Documents/FadCam/FadShot/{Back,Front}/`
 
+## Recording Orientation & Watermark
+- Both cameras use the same `AVAssetWriterInput` portrait rotation.
+- Front-camera flip is applied to `AVCaptureVideoDataOutput` before watermark compositing.
+- Watermark text/corner must never be mirrored by the front-camera flip.
+- Final watermark placement must concatenate a world-space translation; using
+  `translatedBy` after rotation moves it in the rotated local coordinate space.
+
 ## Simplicity First
 - Minimal code changes, no over-engineering
 - Don't refactor unrelated code when fixing bugs

@@ -79,6 +79,7 @@ class CameraService: NSObject {
         if session.canAddOutput(vDataOutput) {
             session.addOutput(vDataOutput)
             videoDataOutput = vDataOutput
+            setVideoMirrored(position == .front)
         }
 
         let aDataOutput = AVCaptureAudioDataOutput()
@@ -107,6 +108,7 @@ class CameraService: NSObject {
         session.addInput(videoInput)
         videoDeviceInput = videoInput
         currentCamera = newPosition
+        setVideoMirrored(newPosition == .front)
         watermarkBufferPool = nil  // force re-creation on next frame
     }
 
@@ -155,7 +157,8 @@ class CameraService: NSObject {
     var currentZoom: CGFloat { videoDeviceInput?.device.videoZoomFactor ?? 1.0 }
 
     func setVideoMirrored(_ mirrored: Bool) {
-        guard let conn = videoDataOutput?.connections.first else { return }
+        guard let conn = videoDataOutput?.connections.first,
+              conn.isVideoMirroringSupported else { return }
         conn.automaticallyAdjustsVideoMirroring = false
         conn.isVideoMirrored = mirrored
     }
@@ -195,7 +198,7 @@ extension CameraService: AVCaptureVideoDataOutputSampleBufferDelegate, AVCapture
         }
 
         guard let composited = WatermarkRenderer.buildCompositedImage(
-            settings: wmSettings, from: pixelBuffer, cameraPosition: currentCamera) else {
+            settings: wmSettings, from: pixelBuffer) else {
             log.info("Watermark: buildCompositedImage returned nil")
             recorder.appendVideo(sampleBuffer)
             return
