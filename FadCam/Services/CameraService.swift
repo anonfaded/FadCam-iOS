@@ -22,6 +22,7 @@ class CameraService: NSObject {
     private var photoCompletion: ((Result<URL, Error>) -> Void)?
 
     private(set) var currentCamera: AVCaptureDevice.Position = .back
+    private var isFrontRecordingMirrored = true
 
     // Watermark render pipeline
     private var watermarkBufferPool: CVPixelBufferPool?
@@ -79,7 +80,7 @@ class CameraService: NSObject {
         if session.canAddOutput(vDataOutput) {
             session.addOutput(vDataOutput)
             videoDataOutput = vDataOutput
-            setVideoMirrored(position == .front)
+            configureVideoOutputMirroring()
         }
 
         let aDataOutput = AVCaptureAudioDataOutput()
@@ -108,7 +109,8 @@ class CameraService: NSObject {
         session.addInput(videoInput)
         videoDeviceInput = videoInput
         currentCamera = newPosition
-        setVideoMirrored(newPosition == .front)
+        isFrontRecordingMirrored = true
+        configureVideoOutputMirroring()
         watermarkBufferPool = nil  // force re-creation on next frame
     }
 
@@ -156,11 +158,17 @@ class CameraService: NSObject {
 
     var currentZoom: CGFloat { videoDeviceInput?.device.videoZoomFactor ?? 1.0 }
 
-    func setVideoMirrored(_ mirrored: Bool) {
+    /// Controls whether front-camera pixels appear left/right mirrored in the
+    /// final portrait recording. The watermark is composited after this mirror.
+    func setFrontRecordingMirrored(_ mirrored: Bool) {
+        isFrontRecordingMirrored = mirrored
+    }
+
+    private func configureVideoOutputMirroring() {
         guard let conn = videoDataOutput?.connections.first,
               conn.isVideoMirroringSupported else { return }
         conn.automaticallyAdjustsVideoMirroring = false
-        conn.isVideoMirrored = mirrored
+        conn.isVideoMirrored = false
     }
 
     func capturePhoto(completion: @escaping (Result<URL, Error>) -> Void) {
@@ -186,8 +194,9 @@ extension CameraService: AVCaptureVideoDataOutputSampleBufferDelegate, AVCapture
             return
         }
 
+        let shouldMirrorCamera = currentCamera == .front && isFrontRecordingMirrored
         let wmSettings = WatermarkSettings.shared
-        guard wmSettings.enabled, !wmSettings.text.isEmpty else {
+        guard shouldMirrorCamera || (wmSettings.enabled && !wmSettings.text.isEmpty) else {
             recorder.appendVideo(sampleBuffer)
             return
         }
@@ -197,9 +206,12 @@ extension CameraService: AVCaptureVideoDataOutputSampleBufferDelegate, AVCapture
             return
         }
 
-        guard let composited = WatermarkRenderer.buildCompositedImage(
-            settings: wmSettings, from: pixelBuffer) else {
-            log.info("Watermark: buildCompositedImage returned nil")
+        guard let composited = WatermarkRenderer.buildOutputImage(
+            settings: wmSettings,
+            from: pixelBuffer,
+            mirrorCameraForPortraitDisplay: shouldMirrorCamera
+        ) else {
+            log.info("Watermark: buildOutputImage returned nil")
             recorder.appendVideo(sampleBuffer)
             return
         }

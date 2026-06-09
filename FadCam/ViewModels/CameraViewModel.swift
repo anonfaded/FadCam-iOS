@@ -201,7 +201,7 @@ final class CameraViewModel: NSObject, ObservableObject {
 
     func toggleFlip() {
         isFrontFlipped.toggle()
-        cameraService.setVideoMirrored(isFrontFlipped ? false : true)
+        cameraService.setFrontRecordingMirrored(!isFrontFlipped)
     }
 
     func toggleTorch() {

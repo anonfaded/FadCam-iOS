@@ -26,18 +26,30 @@ enum WatermarkRenderer {
 
     // MARK: - Public API
 
-    /// Composites a watermark onto the given pixel buffer.
+    /// Builds the encoded frame after applying camera-only mirroring and then
+    /// compositing an optional watermark.
     /// - Parameters:
     ///   - settings: Watermark configuration (text, size, opacity, corner).
     ///   - pixelBuffer: The raw camera frame in landscape orientation.
-    /// - Returns: A new CIImage with the watermark composited, or nil on failure.
-    static func buildCompositedImage(settings: WatermarkSettings,
-                                      from pixelBuffer: CVPixelBuffer) -> CIImage? {
-        guard settings.enabled, !settings.text.isEmpty else { return nil }
-
-        let background = CIImage(cvPixelBuffer: pixelBuffer)
+    ///   - mirrorCameraForPortraitDisplay: Mirrors camera pixels left/right in
+    ///     the final portrait video without mirroring the watermark.
+    /// - Returns: The processed camera frame, or nil if compositing fails.
+    static func buildOutputImage(settings: WatermarkSettings,
+                                 from pixelBuffer: CVPixelBuffer,
+                                 mirrorCameraForPortraitDisplay: Bool) -> CIImage? {
+        var background = CIImage(cvPixelBuffer: pixelBuffer)
         let ext = background.extent
 
+        // A raw vertical flip becomes a left/right mirror after the writer's
+        // 90-degree portrait rotation.
+        if mirrorCameraForPortraitDisplay {
+            let rawVerticalFlip = CGAffineTransform(
+                a: 1, b: 0, c: 0, d: -1, tx: 0, ty: ext.height
+            )
+            background = background.transformed(by: rawVerticalFlip).cropped(to: ext)
+        }
+
+        guard settings.enabled, !settings.text.isEmpty else { return background }
         guard let wmCG = renderTextCG(settings: settings) else { return nil }
         var wm = CIImage(cgImage: wmCG)
         let textSize = wm.extent.size  // (tw, th) — width and height of unrotated text

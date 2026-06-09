@@ -101,7 +101,10 @@
 
 ## Recording Orientation & Watermark
 - Both cameras use the same `AVAssetWriterInput` portrait rotation.
-- Front-camera flip is applied to `AVCaptureVideoDataOutput` before watermark compositing.
+- Keep `AVCaptureVideoDataOutput` unmirrored. Its raw horizontal mirror becomes
+  a displayed vertical flip after the portrait writer rotation.
+- Mirror only front camera pixels on the raw vertical axis before watermark
+  compositing when a displayed left/right mirror is requested.
 - Watermark text/corner must never be mirrored by the front-camera flip.
 - Final watermark placement must concatenate a world-space translation; using
   `translatedBy` after rotation moves it in the rotated local coordinate space.
