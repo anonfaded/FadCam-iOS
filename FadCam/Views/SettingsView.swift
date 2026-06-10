@@ -9,9 +9,8 @@ struct SettingsView: View {
     @StateObject private var videoSettings = VideoSettings.shared
     @State private var showingAlert = false
     @State private var alertMessage = ""
-    @State private var showGitHubLink = false
-    @State private var showWebsiteLink = false
     @State private var pushVideoSettings = false
+    @State private var showGitHubLink = false
 
     var body: some View {
         NavigationView {
@@ -34,12 +33,6 @@ struct SettingsView: View {
                         }
                     }
 
-                    Toggle(isOn: $saveToPhotos) {
-                        Label("Save to Photos", systemImage: "photo.on.rectangle")
-                    }
-                    .onChange(of: saveToPhotos) { newValue in if newValue { requestPhotoPermission() } }
-                    .tint(.red)
-
                     NavigationLink {
                         WatermarkSettingsView()
                     } label: {
@@ -52,7 +45,17 @@ struct SettingsView: View {
                         }
                     }
                 } header: { Text("Camera") }
-                footer: { Text("Select video resolution and frame rate. When enabled, recordings are automatically saved to the Photos app. Customize the watermark overlay.") }
+                footer: { Text("Resolution, frame rate, and watermark overlay for recordings.") }
+
+                // MARK: — Storage
+                Section {
+                    Toggle(isOn: $saveToPhotos) {
+                        Label("Save to Photos", systemImage: "photo.on.rectangle")
+                    }
+                    .onChange(of: saveToPhotos) { newValue in if newValue { requestPhotoPermission() } }
+                    .tint(.red)
+                } header: { Text("Storage") }
+                footer: { Text("Automatically save new recordings and FadShot photos to the Photos app.") }
 
                 // MARK: — App Info
                 Section {
@@ -82,81 +85,56 @@ struct SettingsView: View {
                                 .foregroundColor(.primary)
                             Spacer()
                             Image(systemName: "arrow.up.right")
-                                .font(.caption)
-                                .foregroundColor(.red.opacity(0.7))
+                                .font(.system(size: 12, weight: .semibold))
+                                .foregroundColor(.secondary)
                         }
+                    }
+                    .sheet(isPresented: $showGitHubLink) {
+                        LinkPreviewView(url: URL(string: "https://github.com/anonfaded/FadCam-iOS")!, title: "FadCam iOS Source Code")
                     }
 
                     Button {
-                        showWebsiteLink = true
+                        if let url = URL(string: "mailto:contact@fadseclab.com") {
+                            UIApplication.shared.open(url)
+                        }
                     } label: {
                         HStack {
-                            Label("Website", systemImage: "globe")
+                            Label("Email Us", systemImage: "envelope")
                                 .foregroundColor(.primary)
                             Spacer()
                             Image(systemName: "arrow.up.right")
-                                .font(.caption)
-                                .foregroundColor(.red.opacity(0.7))
+                                .font(.system(size: 12, weight: .semibold))
+                                .foregroundColor(.secondary)
                         }
                     }
                 } header: { Text("App Info") }
-                footer: { Text("Toggle ON to show onboarding on next app launch. Toggle OFF to cancel.") }
+                footer: { Text("Toggle ON to show onboarding on next launch.") }
 
                 // MARK: — Danger Zone
                 Section {
                     NavigationLink {
                         TrashView()
                     } label: {
-                        HStack {
-                            Label("Trash", systemImage: "trash.fill")
-                                .foregroundColor(.red)
-                            Spacer()
-                            Image(systemName: "chevron.right")
-                                .font(.caption)
-                                .foregroundColor(.red.opacity(0.5))
-                        }
+                        Label("Trash", systemImage: "trash.fill")
+                            .foregroundColor(.red)
                     }
                 } header: { Text("Danger Zone") }
                 footer: { Text("Recover or permanently delete trashed recordings.") }
 
                 // MARK: — Footer
                 Section {
-                    VStack(spacing: 8) {
-                        if let logo = UIImage(named: "HeaderLogo") {
-                            Image(uiImage: logo).resizable().aspectRatio(contentMode: .fit).frame(height: 24).opacity(0.5)
-                        }
-                        Button {
-                            if let url = URL(string: "https://fadcam.fadseclab.com") {
-                                UIApplication.shared.open(url)
-                            }
-                        } label: {
-                            Text(verbatim: "https://fadcam.fadseclab.com")
-                                .font(.footnote)
-                                .foregroundColor(.red.opacity(0.7))
-                        }
+                    VStack(spacing: 6) {
                         Text("Made with \u{2764}\u{FE0F} by FadSec Lab in \u{1F1F5}\u{1F1F0}")
                             .font(.footnote).foregroundColor(.secondary)
                         Text("\u{00A9} 2024\u{2013}2026  \u{2022}  GPLv3 License")
                             .font(.caption2).foregroundColor(.secondary).opacity(0.7)
                     }
-                    .frame(maxWidth: .infinity).padding(.vertical, 12)
+                    .frame(maxWidth: .infinity).padding(.vertical, 8)
                 }
             }
             .navigationTitle("Settings")
             .onReceive(NotificationCenter.default.publisher(for: .openVideoSettings)) { _ in
                 pushVideoSettings = true
-            }
-            .sheet(isPresented: $showGitHubLink) {
-                LinkPreviewView(
-                    url: URL(string: "https://github.com/anonfaded/FadCam-iOS")!,
-                    title: "FadCam iOS Source Code"
-                )
-            }
-            .sheet(isPresented: $showWebsiteLink) {
-                LinkPreviewView(
-                    url: URL(string: "https://fadcam.fadseclab.com")!,
-                    title: "FadCam Website"
-                )
             }
             .alert("Permission Required", isPresented: $showingAlert) {
                 Button("Cancel", role: .cancel) { saveToPhotos = false }

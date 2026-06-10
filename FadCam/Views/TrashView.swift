@@ -4,7 +4,6 @@ import AVFoundation
 struct TrashView: View {
     @StateObject private var vm = TrashViewModel()
     @AppStorage("FadCam.trashAutoDeleteSeconds") private var autoDeleteSeconds: Int = 2592000
-    @Environment(\.dismiss) private var dismiss
     @State private var showEmptyConfirm = false
     @State private var showRestoreConfirm = false
     @State private var itemToDelete: TrashItem?
@@ -16,74 +15,74 @@ struct TrashView: View {
     @State private var selectedIDs = Set<String>()
 
     var body: some View {
-        NavigationView {
-            ZStack {
-                Color.black.ignoresSafeArea()
+        ZStack {
+            Color.black.ignoresSafeArea()
 
-                if vm.isLoading {
-                    ProgressView().tint(.red)
-                } else {
-                    ScrollView {
-                        VStack(alignment: .leading, spacing: 18) {
-                            statsHeader.padding(.top, 4)
+            if vm.isLoading {
+                ProgressView().tint(.red)
+            } else {
+                ScrollView {
+                    VStack(alignment: .leading, spacing: 18) {
+                        statsHeader.padding(.top, 4)
 
-                            if vm.items.isEmpty {
-                                emptyStateContent
-                            } else {
-                                itemsContent
-                            }
+                        if vm.items.isEmpty {
+                            emptyStateContent
+                        } else {
+                            itemsContent
                         }
-                        .padding(.bottom, isSelectionMode ? 120 : 100)
                     }
+                    .padding(.bottom, isSelectionMode ? 120 : 100)
                 }
+            }
 
-                if isSelectionMode { selectionBottomBar }
-                if let toast = actionToast { toastView(toast) }
-            }
-            .navigationTitle(isSelectionMode ? selectionTitle : "Trash")
-            .navigationBarTitleDisplayMode(.inline)
-            .toolbar { toolbarContent }
-            .refreshable { vm.loadItems() }
-            .onAppear { vm.loadItems() }
-            .alert("Empty Trash", isPresented: $showEmptyConfirm) {
-                TextField("Type DELETE to confirm", text: $emptyDeleteText)
-                Button("Cancel", role: .cancel) { emptyDeleteText = "" }
-                Button(emptyAlertButtonLabel, role: .destructive) {
-                    let count = isSelectionMode ? selectedIDs.count : vm.items.count
-                    executeEmptyAction()
-                    showToast(count == 1 ? "1 item deleted" : "\(count) items deleted")
-                    emptyDeleteText = ""
-                }
-                .disabled(emptyDeleteText != "DELETE")
-            } message: { Text(emptyAlertMessage) }
-            .alert("Restore", isPresented: $showRestoreConfirm) {
-                Button("Cancel", role: .cancel) {}
-                Button("Restore") {
-                    let count = isSelectionMode ? selectedIDs.count : vm.items.count
-                    executeRestoreAction()
-                    showToast(count == 1 ? "1 item restored" : "\(count) items restored")
-                }
-            } message: { Text(restoreAlertMessage) }
-            .alert("Delete Permanently?", isPresented: $showDeleteConfirm) {
-                TextField("Type DELETE to confirm", text: $permanentDeleteText)
-                Button("Cancel", role: .cancel) {
-                    itemToDelete = nil
-                    permanentDeleteText = ""
-                }
-                Button("Delete", role: .destructive) {
-                    if let item = itemToDelete {
-                        vm.permanentlyDelete(item)
-                        showToast("Deleted permanently")
-                    }
-                    itemToDelete = nil
-                    permanentDeleteText = ""
-                }
-                .disabled(permanentDeleteText != "DELETE")
-            } message: {
-                Text("This will permanently delete the file. Type DELETE to confirm.")
-            }
+            if isSelectionMode { selectionBottomBar }
+            if let toast = actionToast { toastView(toast) }
         }
-        .navigationViewStyle(.stack)
+        .navigationTitle(isSelectionMode ? selectionTitle : "Trash")
+        .navigationBarTitleDisplayMode(.inline)
+        .navigationBarBackButtonHidden(isSelectionMode)
+        .toolbar { toolbarContent }
+        .refreshable { vm.loadItems() }
+        .onAppear { vm.loadItems() }
+        .alert("Empty Trash", isPresented: $showEmptyConfirm) {
+            TextField("Type DELETE to confirm", text: $emptyDeleteText)
+            Button("Cancel", role: .cancel) { emptyDeleteText = "" }
+            Button(emptyAlertButtonLabel, role: .destructive) {
+                let count = isSelectionMode ? selectedIDs.count : vm.items.count
+                executeEmptyAction()
+                showToast(count == 1 ? "1 item deleted" : "\(count) items deleted")
+                emptyDeleteText = ""
+            }
+            .disabled(emptyDeleteText != "DELETE")
+        } message: { Text(emptyAlertMessage) }
+        .alert("Restore", isPresented: $showRestoreConfirm) {
+            Button("Cancel", role: .cancel) {}
+            Button("Restore") {
+                let count = isSelectionMode ? selectedIDs.count : vm.items.count
+                executeRestoreAction()
+                showToast(count == 1 ? "1 item restored" : "\(count) items restored")
+            }
+        } message: { Text(restoreAlertMessage) }
+        .alert("Delete Permanently?", isPresented: $showDeleteConfirm) {
+            TextField("Type DELETE to confirm", text: $permanentDeleteText)
+            Button("Cancel", role: .cancel) {
+                itemToDelete = nil
+                permanentDeleteText = ""
+            }
+            Button("Delete", role: .destructive) {
+                if let item = itemToDelete {
+                    vm.permanentlyDelete(item)
+                    showToast("Deleted permanently")
+                }
+                itemToDelete = nil
+                permanentDeleteText = ""
+            }
+            .disabled(permanentDeleteText != "DELETE")
+        } message: {
+            Text("This will permanently delete the file. Type DELETE to confirm.")
+        }
+        .onAppear { setTabBar(hidden: true) }
+        .onDisappear { setTabBar(hidden: false) }
     }
 
     @ToolbarContentBuilder
@@ -95,19 +94,7 @@ struct TrashView: View {
                 } label: {
                     Text("Cancel")
                         .font(.system(size: 16, weight: .semibold))
-                        .foregroundColor(.white)
-                }
-            } else {
-                Button {
-                    dismiss()
-                } label: {
-                    HStack(spacing: 3) {
-                        Image(systemName: "chevron.left")
-                            .font(.system(size: 14, weight: .semibold))
-                        Text("Back")
-                            .font(.system(size: 16))
-                    }
-                    .foregroundColor(.red)
+                        .foregroundColor(.red)
                 }
             }
         }
@@ -115,8 +102,7 @@ struct TrashView: View {
             if isSelectionMode {
                 HStack(spacing: 8) {
                     Button {
-                        if selectedIDs.count == 0 { toggleSelectAll() }
-                        else { toggleSelectAll() }
+                        toggleSelectAll()
                     } label: {
                         let all = selectedIDs.count == vm.items.count
                         Text(all ? "None" : "All")
@@ -627,6 +613,23 @@ struct TrashView: View {
         let formatter = DateFormatter()
         formatter.dateFormat = "MMMM yyyy"
         return Dictionary(grouping: vm.items) { formatter.string(from: $0.deletedAt) }
+    }
+
+    // MARK: - Tab Bar
+
+    private func setTabBar(hidden: Bool) {
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.05) {
+            guard let scene = UIApplication.shared.connectedScenes.first as? UIWindowScene,
+                  let root = scene.windows.first?.rootViewController else { return }
+            if let tab = findTab(from: root) { tab.tabBar.isHidden = hidden }
+        }
+    }
+
+    private func findTab(from vc: UIViewController) -> UITabBarController? {
+        if let t = vc as? UITabBarController { return t }
+        if let t = vc.tabBarController { return t }
+        for child in vc.children { if let f = findTab(from: child) { return f } }
+        return nil
     }
 }
 

@@ -1244,6 +1244,7 @@ struct RecordingCard: View {
             Button { onOpen() } label: { Label("Open", systemImage: "play.rectangle.fill") }
             Button { onInfo() } label: { Label("Info", systemImage: "info.circle") }
             Button { onDuplicate() } label: { Label("Duplicate", systemImage: "plus.square.on.square") }
+            Divider()
             Menu {
                 Button { onSaveCopy() } label: {
                     Label("Copy to Gallery", systemImage: "doc.on.doc.fill")
@@ -1404,6 +1405,7 @@ struct RecordingListRow: View {
             Button { onOpen() } label: { Label("Open", systemImage: "play.rectangle.fill") }
             Button { onInfo() } label: { Label("Info", systemImage: "info.circle") }
             Button { onDuplicate() } label: { Label("Duplicate", systemImage: "plus.square.on.square") }
+            Divider()
             Menu {
                 Button { onSaveCopy() } label: {
                     Label("Copy to Gallery", systemImage: "doc.on.doc.fill")

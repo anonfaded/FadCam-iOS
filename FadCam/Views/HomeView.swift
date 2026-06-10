@@ -131,94 +131,121 @@ struct HomeView: View {
     @State private var comingSoonToast: String?
 
     var body: some View {
-        ZStack {
-            Color.black.ignoresSafeArea()
+        GeometryReader { proxy in
+            let isLandscape = proxy.size.width > proxy.size.height
+            ZStack {
+                Color.black.ignoresSafeArea()
 
-            if cameraVM.isPermissionGranted {
-                VStack(spacing: 10) {
-                    topBar
-                    segmentedTabs
-                    cardGrid
-                    previewArea
-                    actionBar
-                }
-                .padding(.top, 6)
-                .padding(.bottom, 8)
-            } else {
-                permissionDeniedView
-            }
+                if cameraVM.isPermissionGranted {
+                    if isLandscape {
+                        HStack(spacing: 0) {
+                            // Left column — settings & info cards
+                            VStack(spacing: 10) {
+                                topBar
+                                segmentedTabs
+                                cardGrid
+                                Spacer()
+                            }
+                            .frame(width: proxy.size.width * 0.45)
+                            .padding(.top, 6)
+                            .padding(.bottom, 8)
 
-            // Toast overlay for coming-soon tabs
-            if let toast = comingSoonToast {
-                VStack {
-                    Spacer()
-                    Text(toast)
-                        .font(.system(size: 13, weight: .semibold))
-                        .foregroundColor(.white)
-                        .padding(.horizontal, 16).padding(.vertical, 9)
-                        .background(Color.black.opacity(0.85))
-                        .clipShape(Capsule())
-                        .overlay(Capsule().stroke(Color.orange.opacity(0.6), lineWidth: 1))
-                        .padding(.bottom, 120)
-                        .transition(.move(edge: .bottom).combined(with: .opacity))
-                        .allowsHitTesting(false)
-                }
-                .animation(.easeInOut(duration: 0.25), value: comingSoonToast)
-            }
-        }
-        .gesture(
-            MagnificationGesture()
-                .onChanged { value in
-                    if cameraVM.isPreviewActive {
-                        let newZoom = lastZoomValue * value
-                        cameraVM.updateZoom(newZoom)
+                            // Right column — preview + action bar
+                            VStack(spacing: 10) {
+                                previewArea
+                                actionBar
+                            }
+                            .frame(width: proxy.size.width * 0.55)
+                            .padding(.top, 6)
+                            .padding(.bottom, 8)
+                        }
+                    } else {
+                        VStack(spacing: 10) {
+                            topBar
+                            segmentedTabs
+                            cardGrid
+                            previewArea
+                            actionBar
+                        }
+                        .padding(.top, 6)
+                        .padding(.bottom, 8)
                     }
+                } else {
+                    permissionDeniedView
                 }
-                .onEnded { _ in
-                    lastZoomValue = cameraVM.zoomFactor
+
+                // Toast overlay for coming-soon tabs
+                if let toast = comingSoonToast {
+                    VStack {
+                        Spacer()
+                        Text(toast)
+                            .font(.system(size: 13, weight: .semibold))
+                            .foregroundColor(.white)
+                            .padding(.horizontal, 16).padding(.vertical, 9)
+                            .background(Color.black.opacity(0.85))
+                            .clipShape(Capsule())
+                            .overlay(Capsule().stroke(Color.red.opacity(0.6), lineWidth: 1))
+                            .padding(.bottom, 120)
+                            .transition(.move(edge: .bottom).combined(with: .opacity))
+                            .allowsHitTesting(false)
+                    }
+                    .animation(.easeInOut(duration: 0.25), value: comingSoonToast)
                 }
-        )
-        .onAppear {
-            cameraVM.checkPermissions()
-            if cameraVM.isPermissionGranted && !cameraVM.isCameraReady {
-                cameraVM.setupCamera()
             }
-        }
-        .onChange(of: scenePhase) { newPhase in
-            switch newPhase {
-            case .active:
-                if cameraVM.isPermissionGranted && cameraVM.isPreviewActive {
-                    cameraVM.startSession()
-                }
-            case .background:
-                if cameraVM.recordingState == .recording { cameraVM.stopRecording() }
-                if cameraVM.isPreviewActive { cameraVM.stopSession() }
-            default: break
-            }
-        }
-        .alert("Recording Error", isPresented: .constant(cameraVM.errorMessage != nil)) {
-            Button("OK") { cameraVM.errorMessage = nil }
-        } message: {
-            Text(cameraVM.errorMessage ?? "")
-        }
-        .overlay {
-            if showDrawer {
-                drawerOverlay
-                    .transition(.move(edge: .leading))
-            }
-        }
-        .animation(.spring(response: 0.35, dampingFraction: 0.8), value: showDrawer)
-        .sheet(isPresented: $showDiscordLink) {
-            LinkPreviewView(
-                url: URL(string: "https://discord.gg/kvAZvdkuuN")!,
-                title: "FadCam Discord"
+            .gesture(
+                MagnificationGesture()
+                    .onChanged { value in
+                        if cameraVM.isPreviewActive {
+                            let newZoom = lastZoomValue * value
+                            cameraVM.updateZoom(newZoom)
+                        }
+                    }
+                    .onEnded { _ in
+                        lastZoomValue = cameraVM.zoomFactor
+                    }
             )
-        }
-        .sheet(isPresented: $showWebsiteLink) {
-            LinkPreviewView(
-                url: URL(string: "https://fadcam.fadseclab.com")!,
-                title: "FadCam Website"
-            )
+            .onAppear {
+                cameraVM.checkPermissions()
+                if cameraVM.isPermissionGranted && !cameraVM.isCameraReady {
+                    cameraVM.setupCamera()
+                }
+            }
+            .onChange(of: scenePhase) { newPhase in
+                switch newPhase {
+                case .active:
+                    if cameraVM.isPermissionGranted && cameraVM.isPreviewActive {
+                        cameraVM.startSession()
+                    }
+                case .background:
+                    if cameraVM.recordingState == .recording { cameraVM.stopRecording() }
+                    if cameraVM.isPreviewActive { cameraVM.stopSession() }
+                default: break
+                }
+            }
+            .alert("Recording Error", isPresented: .constant(cameraVM.errorMessage != nil)) {
+                Button("OK") { cameraVM.errorMessage = nil }
+            } message: {
+                Text(cameraVM.errorMessage ?? "")
+            }
+            .overlay {
+                if showDrawer {
+                    drawerOverlay
+                        .transition(.move(edge: .leading))
+                }
+            }
+            .animation(.spring(response: 0.35, dampingFraction: 0.8), value: showDrawer)
+            .sheet(isPresented: $showDiscordLink) {
+                LinkPreviewView(
+                    url: URL(string: "https://discord.gg/kvAZvdkuuN")!,
+                    title: "FadCam Discord"
+                )
+            }
+            .sheet(isPresented: $showWebsiteLink) {
+                LinkPreviewView(
+                    url: URL(string: "https://fadcam.fadseclab.com")!,
+                    title: "FadCam Website"
+                )
+            }
         }
     }
 
@@ -407,8 +434,14 @@ struct HomeView: View {
             ForEach(TopTab.allCases) { tab in
                 Button {
                     if tab.isComingSoon {
+                        let msg: String
+                        switch tab {
+                        case .fadRec: msg = "FadRec — Screen Recorder · Coming Soon"
+                        case .fadMic: msg = "FadMic — Audio Recorder · Coming Soon"
+                        default:      msg = "\(tab.rawValue) — Coming Soon"
+                        }
                         withAnimation(.easeInOut(duration: 0.2)) {
-                            comingSoonToast = "\(tab.rawValue) — Coming Soon"
+                            comingSoonToast = msg
                         }
                         DispatchQueue.main.asyncAfter(deadline: .now() + 1.6) {
                             withAnimation(.easeInOut(duration: 0.3)) {
@@ -427,9 +460,9 @@ struct HomeView: View {
                         if tab.isComingSoon {
                             Text("Soon")
                                 .font(.system(size: 8, weight: .heavy))
-                                .foregroundColor(.orange.opacity(0.9))
+                                .foregroundColor(.red.opacity(0.9))
                                 .padding(.horizontal, 5).padding(.vertical, 1.5)
-                                .background(Color.orange.opacity(0.2))
+                                .background(Color.red.opacity(0.15))
                                 .clipShape(Capsule())
                         }
                     }
@@ -633,23 +666,6 @@ struct HomeView: View {
                         .onChange(of: geo.size) { previewSize = $0 }
                 })
                 .mask(irisMask)
-
-                if cameraVM.recordingState == .recording {
-                    VStack {
-                        HStack(spacing: 6) {
-                            RecordingDot()
-                            Text(formatTime(cameraVM.elapsedTime))
-                                .font(.system(size: 12, design: .monospaced).weight(.bold))
-                                .foregroundColor(.white)
-                                .padding(.horizontal, 8).padding(.vertical, 3)
-                                .background(Color.black.opacity(0.55))
-                                .clipShape(Capsule())
-                            Spacer()
-                        }
-                        .padding(.horizontal, 10).padding(.top, 8)
-                        Spacer()
-                    }
-                }
 
                 VStack {
                     Spacer()
@@ -1170,7 +1186,7 @@ struct HomeView: View {
         }
     }
 
-    // MARK: - Action Bar (Torch | Start/Stop | Switch | Flip)
+    // MARK: - Action Bar (Torch | Start·Timer/Stop | Flip | Switch)
 
     private var actionBar: some View {
         HStack(spacing: 12) {
@@ -1207,13 +1223,25 @@ struct HomeView: View {
                             startPoint: .top, endPoint: .bottom
                         )
                     )
-                    HStack(spacing: 6) {
-                        Image(systemName: cameraVM.recordingState == .recording ? "stop.fill" : "play.fill")
-                            .font(.system(size: 14, weight: .bold))
-                        Text(cameraVM.recordingState == .recording ? "Stop" : "Start")
-                            .font(.system(size: 15, weight: .bold))
+                    if cameraVM.recordingState == .recording {
+                        HStack(spacing: 6) {
+                            Image(systemName: "stop.fill")
+                                .font(.system(size: 14, weight: .bold))
+                                .foregroundColor(.white)
+                            Text(formatTime(cameraVM.elapsedTime))
+                                .font(.system(size: 15, design: .monospaced).weight(.bold))
+                                .foregroundColor(.white)
+                        }
+                    } else {
+                        HStack(spacing: 6) {
+                            Image(systemName: "play.fill")
+                                .font(.system(size: 14, weight: .bold))
+                                .foregroundColor(.white)
+                            Text("Start")
+                                .font(.system(size: 15, weight: .bold))
+                                .foregroundColor(.white)
+                        }
                     }
-                    .foregroundColor(.white)
                 }
                 .frame(height: 50)
                 .shadow(color: cameraVM.recordingState == .recording ? .red.opacity(0.3) : .green.opacity(0.3), radius: 8, y: 2)

@@ -17,9 +17,9 @@ struct FaditorMiniView: View {
                         .foregroundColor(.green)
                     Text("SOON")
                         .font(.system(size: 9, weight: .heavy))
-                        .foregroundColor(.green)
+                        .foregroundColor(.red)
                         .padding(.horizontal, 6).padding(.vertical, 2)
-                        .background(Color.green.opacity(0.15))
+                        .background(Color.red.opacity(0.15))
                         .clipShape(Capsule())
                 }
 

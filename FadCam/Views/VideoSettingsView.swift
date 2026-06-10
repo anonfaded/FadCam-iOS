@@ -97,6 +97,25 @@ struct VideoSettingsView: View {
             } footer: {
                 Text("Bitrate controls video quality vs file size. Higher values = better quality but larger files.")
             }
+
+            // MARK: - Orientation (Coming Soon)
+            Section {
+                HStack {
+                    Label("Portrait", systemImage: "rectangle.portrait.inset.filled")
+                        .foregroundColor(.secondary)
+                    Spacer()
+                    Text("SOON")
+                        .font(.system(size: 8, weight: .heavy))
+                        .foregroundColor(.red.opacity(0.8))
+                        .padding(.horizontal, 5).padding(.vertical, 1.5)
+                        .background(Color.red.opacity(0.15))
+                        .clipShape(Capsule())
+                }
+            } header: {
+                Text("Orientation")
+            } footer: {
+                Text("Currently fixed to Portrait. Landscape and auto-rotate options coming in a future update.")
+            }
         }
         .listStyle(.insetGrouped)
         .navigationTitle("Video Settings")
