@@ -119,8 +119,8 @@ struct RecordsView: View {
                 viewModel.loadRecordings()
                 viewModel.checkPhotosPermission()
             }
-            .onChange(of: sortOption) { storedSort = $0.rawValue }
-            .onChange(of: viewMode) { storedView = $0.rawValue }
+            .onChangeCompat(of: sortOption) { storedSort = $0.rawValue }
+            .onChangeCompat(of: viewMode) { storedView = $0.rawValue }
             .sheet(item: $selectedRecording) { recording in
                 if recording.isVideo {
                     VideoPlayerView(url: recording.url)
@@ -128,7 +128,7 @@ struct RecordsView: View {
                     PhotoViewerView(url: recording.url)
                 }
             }
-            .onChange(of: selectedRecording) { newValue in
+            .onChangeCompat(of: selectedRecording) { newValue in
                 if let rec = newValue { viewModel.markAsViewed(rec) }
             }
             .sheet(item: $infoRecording) { FileInfoView(recording: $0) }

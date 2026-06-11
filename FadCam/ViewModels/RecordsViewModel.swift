@@ -64,6 +64,32 @@ final class RecordsViewModel: ObservableObject {
         return granted
     }
 
+    /// Loads AVAsset duration without deprecation warnings.
+    /// Uses the newer async `load(.duration)` on iOS 16+,
+    /// falling back to the synchronous `duration` property on iOS 15.
+    private func loadDurationSync(from asset: AVAsset) -> Double {
+        let cmTime: CMTime
+        if #available(iOS 16.0, *) {
+            let semaphore = DispatchSemaphore(value: 0)
+            var loaded: CMTime = .zero
+            // AVAsset.load runs on a dedicated dispatch queue,
+            // so blocking a background thread is safe here.
+            Task.detached {
+                do {
+                    loaded = try await asset.load(.duration)
+                } catch {
+                    loaded = .zero
+                }
+                semaphore.signal()
+            }
+            semaphore.wait()
+            cmTime = loaded
+        } else {
+            cmTime = asset.duration
+        }
+        return cmTime.seconds.isNaN ? 0 : cmTime.seconds
+    }
+
     func loadRecordings() {
         isLoading = true
         defer { isLoading = false }
@@ -96,7 +122,7 @@ final class RecordsViewModel: ObservableObject {
                     let fileSize = Int64(resourceValues?.fileSize ?? 0)
                     totalSize += fileSize
                     let asset = AVAsset(url: fileURL)
-                    let duration = asset.duration.seconds.isNaN ? 0 : asset.duration.seconds
+                    let duration = loadDurationSync(from: asset)
                     results.append(Recording(
                         url: fileURL, filename: fileURL.lastPathComponent,
                         date: date, duration: duration, fileSize: fileSize,
@@ -116,7 +142,7 @@ final class RecordsViewModel: ObservableObject {
                 let fileSize = Int64(resourceValues?.fileSize ?? 0)
                 totalSize += fileSize
                 let asset = AVAsset(url: fileURL)
-                let duration = asset.duration.seconds.isNaN ? 0 : asset.duration.seconds
+                let duration = loadDurationSync(from: asset)
                 results.append(Recording(
                     url: fileURL, filename: fileURL.lastPathComponent,
                     date: date, duration: duration, fileSize: fileSize,

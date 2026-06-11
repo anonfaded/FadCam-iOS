@@ -52,7 +52,7 @@ struct SettingsView: View {
                     Toggle(isOn: $saveToPhotos) {
                         Label("Save to Photos", systemImage: "photo.on.rectangle")
                     }
-                    .onChange(of: saveToPhotos) { newValue in if newValue { requestPhotoPermission() } }
+                    .onChangeCompat(of: saveToPhotos) { newValue in if newValue { requestPhotoPermission() } }
                     .tint(.red)
                 } header: { Text("Storage") }
                 footer: { Text("Automatically save new recordings and FadShot photos to the Photos app.") }
@@ -68,7 +68,7 @@ struct SettingsView: View {
                     Toggle(isOn: $resumeOnboarding) {
                         Label("Show Onboarding Again", systemImage: "arrow.counterclockwise")
                     }
-                    .onChange(of: resumeOnboarding) { newValue in
+                    .onChangeCompat(of: resumeOnboarding) { newValue in
                         if newValue {
                             hasCompletedOnboarding = false
                         } else {

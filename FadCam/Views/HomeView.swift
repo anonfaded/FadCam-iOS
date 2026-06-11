@@ -210,7 +210,7 @@ struct HomeView: View {
                     cameraVM.setupCamera()
                 }
             }
-            .onChange(of: scenePhase) { newPhase in
+            .onChangeCompat(of: scenePhase) { newPhase in
                 switch newPhase {
                 case .active:
                     if cameraVM.isPermissionGranted && cameraVM.isPreviewActive {
@@ -663,7 +663,7 @@ struct HomeView: View {
                 }
                 .background(GeometryReader { geo in
                     Color.clear.onAppear { previewSize = geo.size }
-                        .onChange(of: geo.size) { previewSize = $0 }
+                        .onChangeCompat(of: geo.size) { previewSize = $0 }
                 })
                 .mask(irisMask)
 
@@ -722,7 +722,7 @@ struct HomeView: View {
             previewAutoOpened = false
             handlePreviewToggle()
         }
-        .onChange(of: cameraVM.recordingState) { newState in
+        .onChangeCompat(of: cameraVM.recordingState) { newState in
             guard previewAreaEnabled else { return }
             if newState == .recording && !showCameraPreview && !isTransitioning {
                 previewAutoOpened = true
@@ -730,7 +730,7 @@ struct HomeView: View {
             }
         }
         // Handle EXTERNAL isPreviewActive changes (recording stop, background, etc.)
-        .onChange(of: cameraVM.isPreviewActive) { active in
+        .onChangeCompat(of: cameraVM.isPreviewActive) { active in
             guard !isInternalToggle else { return }
             guard previewAreaEnabled || previewAutoOpened else { return }
             if !active && showCameraPreview {

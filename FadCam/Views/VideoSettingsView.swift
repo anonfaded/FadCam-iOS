@@ -19,7 +19,7 @@ struct VideoSettingsView: View {
                     }
                 }
                 .pickerStyle(.menu)
-                .onChange(of: settings.selectedResolution) { res in
+                .onChangeCompat(of: settings.selectedResolution) { res in
                     if let cam = camera {
                         settings.refreshFrameRates(for: res, from: cam.formats)
                     }
