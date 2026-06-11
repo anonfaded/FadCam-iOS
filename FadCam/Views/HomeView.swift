@@ -726,20 +726,20 @@ struct HomeView: View {
                                 } label: {
                                     let active = cameraVM.isBatterySaverActive
                                     let pm = ProManager.shared
-                                    VStack(spacing: 1) {
+                                    VStack(spacing: 2) {
                                         Image(systemName: active ? "moon.fill" : "moon")
                                             .font(.system(size: 12, weight: .medium))
                                             .foregroundColor(.white)
                                         Text(active ? "On" : "Saver")
                                             .font(.system(size: 8, weight: .medium))
                                             .foregroundColor(.white.opacity(0.85))
-                                        if !pm.isPro && !active {
-                                            Text("\(pm.saverRemainingUses) left")
-                                                .font(.system(size: 7))
-                                                .foregroundColor(Color(red: 1.0, green: 0.85, blue: 0.2))
-                                        }
+                                        Text(!pm.isPro && !active ? "\(pm.saverRemainingUses) left" : " ")
+                                            .font(.system(size: 7, weight: .semibold))
+                                            .foregroundColor(Color(red: 1.0, green: 0.85, blue: 0.2))
+                                            .lineLimit(1)
+                                            .minimumScaleFactor(0.8)
                                     }
-                                    .frame(width: 44, height: 48)
+                                    .frame(width: 50, height: 50)
                                     .background(Color.white.opacity(0.1))
                                     .clipShape(RoundedRectangle(cornerRadius: 8))
                                     .overlay(RoundedRectangle(cornerRadius: 8).stroke(Color.white.opacity(0.12), lineWidth: 1))
@@ -1256,11 +1256,11 @@ struct HomeView: View {
 
     private func previewActionButton(icon: String, label: String, action: @escaping () -> Void) -> some View {
         Button(action: action) {
-            VStack(spacing: 1) {
+            VStack(spacing: 2) {
                 Image(systemName: icon).font(.system(size: 12, weight: .medium)).foregroundColor(.white)
                 Text(label).font(.system(size: 8, weight: .medium)).foregroundColor(.white.opacity(0.85))
             }
-            .frame(width: 44, height: 38)
+            .frame(width: 50, height: 50)
             .background(Color.white.opacity(0.1))
             .clipShape(RoundedRectangle(cornerRadius: 8))
             .overlay(RoundedRectangle(cornerRadius: 8).stroke(Color.white.opacity(0.12), lineWidth: 1))

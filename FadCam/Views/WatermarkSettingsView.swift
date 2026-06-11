@@ -339,6 +339,14 @@ struct WatermarkSettingsView: View {
     private func modeCard(_ mode: WatermarkSettings.Mode) -> some View {
         let isNone = mode == .none
         let locked = isNone && !ProManager.shared.isPro
+        let isSelected = settings.mode == mode
+        let title: String = {
+            switch mode {
+            case .none: return "None"
+            case .textOnly: return "Text Only"
+            case .textWithTimestamp: return "Text + Time"
+            }
+        }()
 
         return Button {
             guard !locked else {
@@ -349,11 +357,11 @@ struct WatermarkSettingsView: View {
                 settings.mode = mode
             }
         } label: {
-            VStack(spacing: 6) {
+            VStack(spacing: 8) {
                 ZStack {
                     Image(systemName: mode.icon)
                         .font(.system(size: 22))
-                        .foregroundColor(settings.mode == mode ? .white : .secondary)
+                        .foregroundColor(isSelected ? .white : .secondary)
                     if locked {
                         Image(systemName: "lock.fill")
                             .font(.system(size: 10, weight: .bold))
@@ -361,19 +369,21 @@ struct WatermarkSettingsView: View {
                             .offset(x: 14, y: -10)
                     }
                 }
-                Text(mode.rawValue)
-                    .font(.system(size: 11, weight: .medium))
-                    .foregroundColor(settings.mode == mode ? .white : .primary)
+                Text(title)
+                    .font(.system(size: 10.5, weight: .semibold))
+                    .foregroundColor(isSelected ? .white : .primary)
+                    .lineLimit(1)
+                    .minimumScaleFactor(0.78)
             }
             .frame(maxWidth: .infinity)
-            .padding(.vertical, 10)
+            .frame(height: 70)
             .background(
                 RoundedRectangle(cornerRadius: 10)
-                    .fill(settings.mode == mode ? Color.red : Color(.systemGray6))
+                    .fill(isSelected ? Color.red : Color(.systemGray6))
             )
             .overlay(
                 RoundedRectangle(cornerRadius: 10)
-                    .stroke(settings.mode == mode ? Color.red : Color(.systemGray4), lineWidth: 1)
+                    .stroke(isSelected ? Color.red : Color(.systemGray4), lineWidth: 1)
             )
         }
         .buttonStyle(.plain)
