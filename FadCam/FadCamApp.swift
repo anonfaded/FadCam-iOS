@@ -19,7 +19,10 @@ struct FadCamApp: App {
         log.info("App init started")
         let completed = UserDefaults.standard.bool(forKey: "hasCompletedOnboarding")
         _showOnboarding = State(initialValue: !completed)
-        log.info("App init done — onboarding: \(!completed)")
+        // Warm StoreKit — starts transaction listener and loads products
+        _ = StoreKitManager.shared
+        _ = ProManager.shared
+        log.info("App init done — onboarding: \(!completed), isPro: \(ProManager.shared.isPro)")
     }
 
     var body: some Scene {

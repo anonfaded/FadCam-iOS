@@ -11,6 +11,7 @@ struct SettingsView: View {
     @State private var alertMessage = ""
     @State private var pushVideoSettings = false
     @State private var showGitHubLink = false
+    @State private var showPaywall = false
 
     var body: some View {
         NavigationView {
@@ -63,6 +64,28 @@ struct SettingsView: View {
                         AboutView()
                     } label: {
                         Label("About", systemImage: "info.circle")
+                    }
+
+                    Button {
+                        showPaywall = true
+                    } label: {
+                        HStack {
+                            Label("FadCam Pro", systemImage: "crown.fill")
+                                .foregroundColor(Color(red: 1.0, green: 0.8, blue: 0.1))
+                            Spacer()
+                            if ProManager.shared.isPro {
+                                Image(systemName: "checkmark.seal.fill")
+                                    .font(.system(size: 14))
+                                    .foregroundColor(.green)
+                            } else {
+                                Image(systemName: "lock.fill")
+                                    .font(.system(size: 12))
+                                    .foregroundColor(.secondary)
+                            }
+                        }
+                    }
+                    .sheet(isPresented: $showPaywall) {
+                        PaywallView()
                     }
 
                     Toggle(isOn: $resumeOnboarding) {

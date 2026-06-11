@@ -1,0 +1,61 @@
+{
+  "identifier" : "FadCamPro",
+  "nonRenewingSubscriptions" : [],
+  "subscriptionGroups" : [
+    {
+      "id" : "FADECAM_PRO",
+      "localizations" : [],
+      "name" : "FadCam Pro",
+      "subscriptions" : [
+        {
+          "adHocOffers" : [],
+          "codeOffers" : [],
+          "displayPrice" : "$4.99",
+          "familyShareable" : false,
+          "groupNumber" : 1,
+          "internalID" : "MONTHLY",
+          "introductoryOffers" : [],
+          "localizations" : [
+            {
+              "description" : "Full access to all Pro features: 4K, 60+ fps, custom watermark, and more.",
+              "displayName" : "FadCam Pro Monthly",
+              "locale" : "en_US"
+            }
+          ],
+          "productID" : "com.fadseclab.fadcam.pro.monthly",
+          "promotionalOffers" : [],
+          "recurringSubscriptionPeriod" : "P1M",
+          "referenceName" : "FadCam Pro Monthly",
+          "subscriptionGroupID" : "FADECAM_PRO",
+          "type" : "RecurringSubscription"
+        },
+        {
+          "adHocOffers" : [],
+          "codeOffers" : [],
+          "displayPrice" : "$29.99",
+          "familyShareable" : false,
+          "groupNumber" : 1,
+          "internalID" : "YEARLY",
+          "introductoryOffers" : [],
+          "localizations" : [
+            {
+              "description" : "Full access to all Pro features, billed annually. Save 50% vs monthly.",
+              "displayName" : "FadCam Pro Yearly",
+              "locale" : "en_US"
+            }
+          ],
+          "productID" : "com.fadseclab.fadcam.pro.yearly",
+          "promotionalOffers" : [],
+          "recurringSubscriptionPeriod" : "P1Y",
+          "referenceName" : "FadCam Pro Yearly",
+          "subscriptionGroupID" : "FADECAM_PRO",
+          "type" : "RecurringSubscription"
+        }
+      ]
+    }
+  ],
+  "version" : {
+    "major" : 1,
+    "minor" : 0
+  }
+}

@@ -4,7 +4,10 @@ import Combine
 /// Dedicated watermark customization screen with live preview.
 struct WatermarkSettingsView: View {
     @StateObject private var settings = WatermarkSettings.shared
+    @StateObject private var proManager = ProManager.shared
     @State private var previewTimestamp = Date()
+    @State private var showPaywall = false
+    @State private var paywallFeature = ""
 
     private let timer = Timer.publish(every: 1, on: .main, in: .common).autoconnect()
 
@@ -40,16 +43,30 @@ struct WatermarkSettingsView: View {
             // MARK: - Custom Text
             if settings.isWatermarkShown {
                 Section {
-                    VStack(spacing: 8) {
-                        TextField("Optional custom text...", text: $settings.customText)
-                            .font(.system(size: 16))
-                            .padding(10)
-                            .background(Color(.systemGray6))
-                            .cornerRadius(8)
-                        Text("Custom text appears on a new line below the watermark.")
-                            .font(.caption)
-                            .foregroundColor(.secondary)
-                            .frame(maxWidth: .infinity, alignment: .leading)
+                    HStack {
+                        VStack(spacing: 8) {
+                            HStack {
+                                TextField("Optional custom text...", text: $settings.customText)
+                                    .font(.system(size: 16))
+                                    .padding(10)
+                                    .background(Color(.systemGray6))
+                                    .cornerRadius(8)
+                                    .disabled(!ProManager.shared.isPro)
+
+                                if !ProManager.shared.isPro {
+                                    Image(systemName: "lock.fill")
+                                        .font(.system(size: 12, weight: .bold))
+                                        .foregroundColor(.yellow)
+                                        .onTapGesture { paywallForFeature("custom watermark text") }
+                                }
+                            }
+                            Text(ProManager.shared.isPro
+                                 ? "Custom text appears on a new line below the watermark."
+                                 : "FadCam Pro — unlock custom watermark text.")
+                                .font(.caption)
+                                .foregroundColor(.secondary)
+                                .frame(maxWidth: .infinity, alignment: .leading)
+                        }
                     }
                 } header: {
                     Text("Custom Text")
@@ -93,18 +110,34 @@ struct WatermarkSettingsView: View {
 
                     // Position
                     HStack {
-                        Picker(selection: $settings.corner) {
-                            ForEach(WatermarkSettings.Corner.allCases) { corner in
-                                HStack(spacing: 6) {
-                                    Image(systemName: corner.systemImage)
-                                    Text(corner.rawValue)
-                                }.tag(corner)
+                        if ProManager.shared.isPro {
+                            Picker(selection: $settings.corner) {
+                                ForEach(WatermarkSettings.Corner.allCases) { corner in
+                                    HStack(spacing: 6) {
+                                        Image(systemName: corner.systemImage)
+                                        Text(corner.rawValue)
+                                    }.tag(corner)
+                                }
+                            } label: {
+                                Label("Position", systemImage: "rectangle.arrowtriangle.2.outward")
                             }
-                        } label: {
-                            Label("Position", systemImage: "rectangle.arrowtriangle.2.outward")
-                        }
-                        resetButton {
-                            settings.corner = WatermarkSettings.defaultCorner
+                            resetButton {
+                                settings.corner = WatermarkSettings.defaultCorner
+                            }
+                        } else {
+                            HStack {
+                                Label("Position", systemImage: "rectangle.arrowtriangle.2.outward")
+                                Spacer()
+                                HStack(spacing: 4) {
+                                    Text(settings.corner.rawValue)
+                                        .font(.subheadline)
+                                        .foregroundColor(.secondary)
+                                    Image(systemName: "lock.fill")
+                                        .font(.system(size: 10, weight: .bold))
+                                        .foregroundColor(.yellow)
+                                }
+                                .onTapGesture { paywallForFeature("change watermark position") }
+                            }
                         }
                     }
 
@@ -131,6 +164,14 @@ struct WatermarkSettingsView: View {
         }
         .onAppear { setTabBar(hidden: true) }
         .onDisappear { setTabBar(hidden: false) }
+        .sheet(isPresented: $showPaywall) {
+            PaywallView()
+        }
+    }
+
+    private func paywallForFeature(_ feature: String) {
+        paywallFeature = feature
+        showPaywall = true
     }
 
     // MARK: - Tab Bar
@@ -296,15 +337,30 @@ struct WatermarkSettingsView: View {
     }
 
     private func modeCard(_ mode: WatermarkSettings.Mode) -> some View {
-        Button {
+        let isNone = mode == .none
+        let locked = isNone && !ProManager.shared.isPro
+
+        return Button {
+            guard !locked else {
+                paywallForFeature("remove watermark")
+                return
+            }
             withAnimation(.easeInOut(duration: 0.2)) {
                 settings.mode = mode
             }
         } label: {
             VStack(spacing: 6) {
-                Image(systemName: mode.icon)
-                    .font(.system(size: 22))
-                    .foregroundColor(settings.mode == mode ? .white : .secondary)
+                ZStack {
+                    Image(systemName: mode.icon)
+                        .font(.system(size: 22))
+                        .foregroundColor(settings.mode == mode ? .white : .secondary)
+                    if locked {
+                        Image(systemName: "lock.fill")
+                            .font(.system(size: 10, weight: .bold))
+                            .foregroundColor(.yellow)
+                            .offset(x: 14, y: -10)
+                    }
+                }
                 Text(mode.rawValue)
                     .font(.system(size: 11, weight: .medium))
                     .foregroundColor(settings.mode == mode ? .white : .primary)

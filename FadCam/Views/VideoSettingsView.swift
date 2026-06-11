@@ -3,19 +3,40 @@ import AVFoundation
 
 /// Video configuration screen — resolution, frame rate, bitrate.
 /// All options derived from real camera hardware capabilities.
+/// Pro features: resolution > 720p, fps > 30, custom bitrate.
 struct VideoSettingsView: View {
     @StateObject private var settings = VideoSettings.shared
+    @StateObject private var proManager = ProManager.shared
     @State private var camera: AVCaptureDevice? = AVCaptureDevice.default(.builtInWideAngleCamera, for: .video, position: .back)
     @State private var showCustomBitrateDialog = false
     @State private var customBitrateText: String = ""
+    @State private var showPaywall = false
 
     var body: some View {
         List {
             // MARK: - Resolution
             Section {
-                Picker("Resolution", selection: $settings.selectedResolution) {
+                Picker("Resolution", selection: Binding(
+                    get: { settings.selectedResolution },
+                    set: { newRes in
+                        if newRes.height > ProManager.freeMaxResolutionHeight,
+                           !proManager.isPro {
+                            showPaywall = true
+                            return
+                        }
+                        settings.selectedResolution = newRes
+                    }
+                )) {
                     ForEach(settings.availableResolutions) { res in
-                        Text(res.label).tag(res)
+                        HStack {
+                            Text(res.label)
+                            if res.height > ProManager.freeMaxResolutionHeight {
+                                Image(systemName: proManager.isPro ? "checkmark" : "lock.fill")
+                                    .font(.system(size: 10, weight: .bold))
+                                    .foregroundColor(proManager.isPro ? .secondary : Color(red: 1.0, green: 0.85, blue: 0.2))
+                            }
+                        }
+                        .tag(res)
                     }
                 }
                 .pickerStyle(.menu)
@@ -27,30 +48,73 @@ struct VideoSettingsView: View {
             } header: {
                 Text("Resolution")
             } footer: {
-                Text("Higher resolutions produce sharper video but use more storage.")
+                if proManager.isPro {
+                    Text("Higher resolutions produce sharper video but use more storage.")
+                } else {
+                    Text(freeResolutionsFooter)
+                }
             }
 
             // MARK: - Frame Rate
             if !settings.availableFrameRates.isEmpty {
                 Section {
-                    Picker("Frame Rate", selection: $settings.selectedFrameRate) {
+                    Picker("Frame Rate", selection: Binding(
+                        get: { settings.selectedFrameRate },
+                        set: { newFps in
+                            if newFps > ProManager.freeMaxFrameRate,
+                               !proManager.isPro {
+                                showPaywall = true
+                                return
+                            }
+                            settings.selectedFrameRate = newFps
+                        }
+                    )) {
                         ForEach(settings.availableFrameRates, id: \.self) { fps in
-                            Text("\(fps) fps").tag(fps)
+                            HStack {
+                                Text("\(fps) fps")
+                                if fps > ProManager.freeMaxFrameRate {
+                                    Image(systemName: proManager.isPro ? "checkmark" : "lock.fill")
+                                        .font(.system(size: 10, weight: .bold))
+                                        .foregroundColor(proManager.isPro ? .secondary : Color(red: 1.0, green: 0.85, blue: 0.2))
+                                }
+                            }
+                            .tag(fps)
                         }
                     }
                     .pickerStyle(.menu)
                 } header: {
                     Text("Frame Rate")
                 } footer: {
-                    frameRateFooter
+                    if proManager.isPro {
+                        frameRateFooter
+                    } else {
+                        Text("30 fps is free. FadCam Pro unlocks 60, 120, and 240 fps.")
+                    }
                 }
             }
 
             // MARK: - Bitrate
             Section {
-                Picker("Bitrate", selection: $settings.bitrateMode) {
+                Picker("Bitrate", selection: Binding(
+                    get: { settings.bitrateMode },
+                    set: { newMode in
+                        if newMode == .custom, !proManager.isPro {
+                            showPaywall = true
+                            return
+                        }
+                        settings.bitrateMode = newMode
+                    }
+                )) {
                     Text("Auto").tag(VideoSettings.BitrateMode.auto)
-                    Text("Custom").tag(VideoSettings.BitrateMode.custom)
+                    HStack {
+                        Text("Custom")
+                        if !proManager.isPro {
+                            Image(systemName: "lock.fill")
+                                .font(.system(size: 10, weight: .bold))
+                                .foregroundColor(Color(red: 1.0, green: 0.85, blue: 0.2))
+                        }
+                    }
+                    .tag(VideoSettings.BitrateMode.custom)
                 }
                 .pickerStyle(.menu)
 
@@ -124,9 +188,24 @@ struct VideoSettingsView: View {
             if settings.availableResolutions.isEmpty {
                 settings.refreshHardwareOptions()
             }
+            // Cap non-Pro users to free limits
+            if !proManager.isPro {
+                if settings.selectedResolution.height > ProManager.freeMaxResolutionHeight {
+                    settings.selectedResolution = settings.availableResolutions.first { $0.height <= ProManager.freeMaxResolutionHeight } ?? settings.availableResolutions.first ?? .hd720
+                }
+                if settings.selectedFrameRate > ProManager.freeMaxFrameRate {
+                    settings.selectedFrameRate = ProManager.freeMaxFrameRate
+                }
+                if settings.bitrateMode == .custom {
+                    settings.bitrateMode = .auto
+                }
+            }
             setTabBar(hidden: true)
         }
         .onDisappear { setTabBar(hidden: false) }
+        .sheet(isPresented: $showPaywall) {
+            PaywallView()
+        }
         .alert("Custom Bitrate", isPresented: $showCustomBitrateDialog) {
             TextField("Mbps (e.g. 8)", text: $customBitrateText)
                 .keyboardType(.numberPad)
@@ -153,6 +232,18 @@ struct VideoSettingsView: View {
         default: text = "Slow-motion capable. Ideal for sports or detailed analysis."
         }
         return Text(text)
+    }
+
+    /// Dynamic footer listing actual Pro resolutions available on this device.
+    private var freeResolutionsFooter: String {
+        let proResolutions = settings.availableResolutions
+            .filter { $0.height > ProManager.freeMaxResolutionHeight }
+            .map { $0.shortLabel }
+        guard !proResolutions.isEmpty else {
+            return "720p is free. No higher resolutions available on this device."
+        }
+        let list = proResolutions.joined(separator: ", ")
+        return "720p is free.  FadCam Pro unlocks \(list)."
     }
 
     private func setTabBar(hidden: Bool) {

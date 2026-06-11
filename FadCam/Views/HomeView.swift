@@ -88,6 +88,7 @@ struct HomeView: View {
     @State private var drawerDragOffset: CGFloat = 0
     @State private var showDiscordLink = false
     @State private var showWebsiteLink = false
+    @State private var showPaywall = false
     @AppStorage("previewAreaEnabled") private var previewAreaEnabled = true
 
     // Watermark
@@ -245,6 +246,9 @@ struct HomeView: View {
                     url: URL(string: "https://fadcam.fadseclab.com")!,
                     title: "FadCam Website"
                 )
+            }
+            .sheet(isPresented: $showPaywall) {
+                PaywallView()
             }
         }
     }
@@ -409,15 +413,24 @@ struct HomeView: View {
                         .frame(width: 18, height: 14)
                 }
                 Spacer()
-                // Right: Pro badge
-                Button { } label: {
+                // Right: Pro badge / crown
+                Button {
+                    if !ProManager.shared.isPro {
+                        showPaywall = true
+                    }
+                } label: {
                     HStack(spacing: 3) {
                         Image(systemName: "crown.fill").font(.system(size: 10))
                         Text("Pro").font(.system(size: 12, weight: .bold))
                     }
                     .foregroundColor(.black)
                     .padding(.horizontal, 10).padding(.vertical, 6)
-                    .background(LinearGradient(colors: [Color(red: 1.0, green: 0.85, blue: 0.2), Color(red: 1.0, green: 0.7, blue: 0.0)], startPoint: .top, endPoint: .bottom))
+                    .background(
+                        LinearGradient(
+                            colors: [Color(red: 1.0, green: 0.85, blue: 0.2), Color(red: 1.0, green: 0.7, blue: 0.0)],
+                            startPoint: .top, endPoint: .bottom
+                        )
+                    )
                     .clipShape(Capsule())
                 }
             }
@@ -686,8 +699,34 @@ struct HomeView: View {
                                 }
                             }
                             HStack(spacing: 6) {
-                                previewActionButton(icon: cameraVM.isBatterySaverActive ? "moon.fill" : "moon", label: "Saver") {
-                                    cameraVM.toggleBatterySaver()
+                                Button {
+                                    let proManager = ProManager.shared
+                                    if proManager.isPro || proManager.saverRemainingUses > 0 {
+                                        proManager.consumeSaverUse()
+                                        cameraVM.toggleBatterySaver()
+                                    } else {
+                                        showPaywall = true
+                                    }
+                                } label: {
+                                    let active = cameraVM.isBatterySaverActive
+                                    let proManager = ProManager.shared
+                                    VStack(spacing: 1) {
+                                        Image(systemName: active ? "moon.fill" : "moon")
+                                            .font(.system(size: 12, weight: .medium))
+                                            .foregroundColor(.white)
+                                        Text(active ? "On" : "Saver")
+                                            .font(.system(size: 8, weight: .medium))
+                                            .foregroundColor(.white.opacity(0.85))
+                                        if !proManager.isPro {
+                                            Text("\(proManager.saverRemainingUses) free")
+                                                .font(.system(size: 7))
+                                                .foregroundColor(Color(red: 1.0, green: 0.85, blue: 0.2))
+                                        }
+                                    }
+                                    .frame(width: 44, height: 48)
+                                    .background(Color.white.opacity(0.1))
+                                    .clipShape(RoundedRectangle(cornerRadius: 8))
+                                    .overlay(RoundedRectangle(cornerRadius: 8).stroke(Color.white.opacity(0.12), lineWidth: 1))
                                 }
                                 .opacity(cameraVM.recordingState == .recording ? 1 : 0.4)
                                 .disabled(cameraVM.recordingState != .recording)
