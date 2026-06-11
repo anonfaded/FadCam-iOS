@@ -37,6 +37,25 @@ struct WatermarkSettingsView: View {
                     .foregroundColor(.secondary)
             }
 
+            // MARK: - Custom Text
+            if settings.isWatermarkShown {
+                Section {
+                    VStack(spacing: 8) {
+                        TextField("Optional custom text...", text: $settings.customText)
+                            .font(.system(size: 16))
+                            .padding(10)
+                            .background(Color(.systemGray6))
+                            .cornerRadius(8)
+                        Text("Custom text appears on a new line below the watermark.")
+                            .font(.caption)
+                            .foregroundColor(.secondary)
+                            .frame(maxWidth: .infinity, alignment: .leading)
+                    }
+                } header: {
+                    Text("Custom Text")
+                }
+            }
+
             // MARK: - Appearance
             if settings.isWatermarkShown {
                 Section {
@@ -207,30 +226,44 @@ struct WatermarkSettingsView: View {
         let fs = previewFontSize
         let hasTs = settings.mode == .textWithTimestamp
         let logoHeight = fs * WatermarkSettings.logoToFontRatio
+        let trimmedCustom = settings.customText.trimmingCharacters(in: .whitespacesAndNewlines)
 
-        return HStack(spacing: 2) {
-            Text(WatermarkSettings.brandPrefix)
-                .font(.system(size: fs, weight: .semibold))
-                .shadow(
-                    color: settings.shadowEnabled ? .black.opacity(0.5) : .clear,
-                    radius: settings.shadowEnabled ? 1.5 : 0,
-                    x: settings.shadowEnabled ? 1 : 0,
-                    y: settings.shadowEnabled ? 1 : 0
-                )
+        return VStack(alignment: .leading, spacing: 2) {
+            HStack(spacing: 2) {
+                Text(WatermarkSettings.brandPrefix)
+                    .font(.system(size: fs, weight: .semibold))
+                    .shadow(
+                        color: settings.shadowEnabled ? .black.opacity(0.5) : .clear,
+                        radius: settings.shadowEnabled ? 1.5 : 0,
+                        x: settings.shadowEnabled ? 1 : 0,
+                        y: settings.shadowEnabled ? 1 : 0
+                    )
 
-            if let logo = UIImage(named: "HeaderLogo") {
-                let ratio = logo.size.width / logo.size.height
-                let logoW = logoHeight * ratio
-                Image(uiImage: logo)
-                    .resizable()
-                    .aspectRatio(contentMode: .fit)
-                    .frame(height: logoHeight)
-                    .frame(width: logoW)
+                if let logo = UIImage(named: "HeaderLogo") {
+                    let ratio = logo.size.width / logo.size.height
+                    let logoW = logoHeight * ratio
+                    Image(uiImage: logo)
+                        .resizable()
+                        .aspectRatio(contentMode: .fit)
+                        .frame(height: logoHeight)
+                        .frame(width: logoW)
+                }
+
+                if hasTs {
+                    Text(" - " + timestampString)
+                        .font(.system(size: fs, weight: .regular))
+                        .shadow(
+                            color: settings.shadowEnabled ? .black.opacity(0.5) : .clear,
+                            radius: settings.shadowEnabled ? 1.5 : 0,
+                            x: settings.shadowEnabled ? 1 : 0,
+                            y: settings.shadowEnabled ? 1 : 0
+                        )
+                }
             }
 
-            if hasTs {
-                Text(" - " + timestampString)
-                    .font(.system(size: fs, weight: .regular))
+            if !trimmedCustom.isEmpty {
+                Text(trimmedCustom)
+                    .font(.system(size: fs * 0.72, weight: .regular))
                     .shadow(
                         color: settings.shadowEnabled ? .black.opacity(0.5) : .clear,
                         radius: settings.shadowEnabled ? 1.5 : 0,

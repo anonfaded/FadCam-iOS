@@ -900,30 +900,44 @@ struct HomeView: View {
         let fs = fontSizeForPreview
         let hasTs = watermarkSettings.showTimestamp
         let logoHeight = fs * WatermarkSettings.logoToFontRatio
+        let trimmedCustom = watermarkSettings.customText.trimmingCharacters(in: .whitespacesAndNewlines)
 
-        return HStack(spacing: 2) {
-            Text(WatermarkSettings.brandPrefix)
-                .font(.system(size: fs, weight: .semibold))
-                .shadow(
-                    color: watermarkSettings.shadowEnabled ? .black.opacity(0.5) : .clear,
-                    radius: watermarkSettings.shadowEnabled ? 1.5 : 0,
-                    x: watermarkSettings.shadowEnabled ? 1 : 0,
-                    y: watermarkSettings.shadowEnabled ? 1 : 0
-                )
+        return VStack(alignment: .leading, spacing: 1) {
+            HStack(spacing: 2) {
+                Text(WatermarkSettings.brandPrefix)
+                    .font(.system(size: fs, weight: .semibold))
+                    .shadow(
+                        color: watermarkSettings.shadowEnabled ? .black.opacity(0.5) : .clear,
+                        radius: watermarkSettings.shadowEnabled ? 1.5 : 0,
+                        x: watermarkSettings.shadowEnabled ? 1 : 0,
+                        y: watermarkSettings.shadowEnabled ? 1 : 0
+                    )
 
-            if let logo = UIImage(named: "HeaderLogo") {
-                let ratio = logo.size.width / logo.size.height
-                let logoW = logoHeight * ratio
-                Image(uiImage: logo)
-                    .resizable()
-                    .aspectRatio(contentMode: .fit)
-                    .frame(height: logoHeight)
-                    .frame(width: logoW)
+                if let logo = UIImage(named: "HeaderLogo") {
+                    let ratio = logo.size.width / logo.size.height
+                    let logoW = logoHeight * ratio
+                    Image(uiImage: logo)
+                        .resizable()
+                        .aspectRatio(contentMode: .fit)
+                        .frame(height: logoHeight)
+                        .frame(width: logoW)
+                }
+
+                if hasTs {
+                    Text(" - " + timestampForPreview)
+                        .font(.system(size: fs, weight: .regular))
+                        .shadow(
+                            color: watermarkSettings.shadowEnabled ? .black.opacity(0.5) : .clear,
+                            radius: watermarkSettings.shadowEnabled ? 1.5 : 0,
+                            x: watermarkSettings.shadowEnabled ? 1 : 0,
+                            y: watermarkSettings.shadowEnabled ? 1 : 0
+                        )
+                }
             }
 
-            if hasTs {
-                Text(" - " + timestampForPreview)
-                    .font(.system(size: fs, weight: .regular))
+            if !trimmedCustom.isEmpty {
+                Text(trimmedCustom)
+                    .font(.system(size: fs * 0.72, weight: .regular))
                     .shadow(
                         color: watermarkSettings.shadowEnabled ? .black.opacity(0.5) : .clear,
                         radius: watermarkSettings.shadowEnabled ? 1.5 : 0,

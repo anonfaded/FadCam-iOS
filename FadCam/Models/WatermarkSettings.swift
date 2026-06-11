@@ -13,6 +13,7 @@ final class WatermarkSettings: ObservableObject {
 
     private enum Key {
         static let mode          = "watermark.mode"
+        static let customText    = "watermark.customText"
         static let fontSize      = "watermark.fontSize"
         static let opacity       = "watermark.opacity"
         static let corner        = "watermark.corner"
@@ -22,6 +23,7 @@ final class WatermarkSettings: ObservableObject {
     // MARK: - Defaults
 
     /// Resettable defaults used by the undo buttons in settings.
+    static let defaultCustomText  = ""
     static let defaultFontSize: CGFloat = 24
     static let defaultOpacity: Double   = 1.0
     static let defaultCorner: Corner    = .topLeading
@@ -38,6 +40,11 @@ final class WatermarkSettings: ObservableObject {
     /// Watermark display mode.
     @Published var mode: Mode {
         didSet { UserDefaults.standard.set(mode.rawValue, forKey: Key.mode) }
+    }
+
+    /// Custom user text appended on a new line below the brand prefix + timestamp.
+    @Published var customText: String {
+        didSet { UserDefaults.standard.set(customText, forKey: Key.customText) }
     }
 
     /// Font size in points. Default 48.
@@ -115,6 +122,16 @@ final class WatermarkSettings: ObservableObject {
             result.append(NSAttributedString(string: " - " + formatter.string(from: Date()), attributes: tsAttrs))
         }
 
+        // Custom user text on a new line below the brand line
+        let trimmedCustom = customText.trimmingCharacters(in: .whitespacesAndNewlines)
+        if !trimmedCustom.isEmpty {
+            let customAttrs: [NSAttributedString.Key: Any] = [
+                .font: UIFont.systemFont(ofSize: fontSize * 0.72, weight: .regular),
+                .foregroundColor: UIColor.white
+            ]
+            result.append(NSAttributedString(string: "\n" + trimmedCustom, attributes: customAttrs))
+        }
+
         return result
     }
 
@@ -150,6 +167,7 @@ final class WatermarkSettings: ObservableObject {
     private init() {
         let defaults = UserDefaults.standard
         self.mode          = Mode(rawValue: defaults.string(forKey: Key.mode) ?? Mode.textOnly.rawValue) ?? .textOnly
+        self.customText    = defaults.string(forKey: Key.customText) ?? Self.defaultCustomText
         self.fontSize      = defaults.object(forKey: Key.fontSize) as? CGFloat ?? Self.defaultFontSize
         self.opacity       = defaults.object(forKey: Key.opacity) as? Double ?? Self.defaultOpacity
         self.corner        = Corner(rawValue: defaults.string(forKey: Key.corner) ?? Self.defaultCorner.rawValue) ?? Self.defaultCorner

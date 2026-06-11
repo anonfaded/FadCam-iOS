@@ -90,6 +90,16 @@
 - Get device UDID: `xcodebuildmcp device list`
 - If debug launch stalls on device: uncheck "Debug executable" in Scheme → Run
 
+## Taking App Store Screenshots from Real Device
+- App Store requires 6.7" screenshots (1290×2796).
+- Capture command (replace UDID and filename as needed):
+  ```
+  xcrun devicectl device capture screenshot -d <UDID> --destination /Users/faded/Desktop/FadCam_<Screen>.png
+  ```
+- Get device UDID: `xcodebuildmcp device list`
+- Screenshot saves as PNG at exact device native resolution.
+- Recommended screenshots for App Store: Home tab, Recording in progress, Records tab, Settings tab, Video Settings, Trash.
+
 ## Architecture
 - `CameraService` owns `VideoRecorder`, routes samples in `captureOutput` delegate
 - `CameraViewModel` is `@MainActor ObservableObject`, manages UI state
