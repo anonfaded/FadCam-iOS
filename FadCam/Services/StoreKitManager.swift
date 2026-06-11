@@ -31,6 +31,9 @@ final class StoreKitManager: ObservableObject {
     /// True when product loading is in progress.
     @Published var isLoadingProducts = false
 
+    /// True once product loading has completed (even if empty).
+    @Published private(set) var productsLoaded = false
+
     /// True when a purchase is in flight.
     @Published var isPurchasing = false
 
@@ -42,6 +45,12 @@ final class StoreKitManager: ObservableObject {
 
     /// Whether the user currently has Pro entitlement.
     @Published private(set) var isPro = false
+
+    /// Product identifier for the currently active Pro subscription.
+    @Published private(set) var activeProductID: String?
+
+    /// Expiration date for the currently active Pro subscription.
+    @Published private(set) var subscriptionExpirationDate: Date?
 
     /// True once the initial entitlement check completes.
     @Published private(set) var entitlementChecked = false
@@ -77,12 +86,15 @@ final class StoreKitManager: ObservableObject {
 
     // MARK: - Product Loading
 
-    /// Load products from StoreKit. Safe to call multiple times — no-ops if already loaded.
+    /// Load products from StoreKit. Retries if already loaded but was empty.
     func loadProducts() async {
-        guard products.isEmpty else { return }
+        guard !isLoadingProducts else { return }
         isLoadingProducts = true
         loadError = nil
-        defer { isLoadingProducts = false }
+        defer {
+            isLoadingProducts = false
+            productsLoaded = true
+        }
 
         let identifiers = ProductID.allCases.map { $0.rawValue }
         do {
@@ -166,12 +178,22 @@ final class StoreKitManager: ObservableObject {
     /// Check current entitlements from Transaction history.
     func checkEntitlements() async {
         var hasActive = false
+        var activeProductID: String?
+        var latestExpirationDate: Date?
+        let proProductIDs = Set(ProductID.allCases.map(\.rawValue))
 
         for await result in Transaction.currentEntitlements {
             if case .verified(let transaction) = result {
+                guard proProductIDs.contains(transaction.productID) else { continue }
+                let hasBeenRevoked = transaction.revocationDate != nil
                 let hasExpired = transaction.expirationDate.map { $0 < Date() } ?? false
-                if !hasExpired && !transaction.isUpgraded {
+                if !hasBeenRevoked && !hasExpired && !transaction.isUpgraded {
                     hasActive = true
+                    if latestExpirationDate == nil ||
+                        (transaction.expirationDate ?? .distantFuture) > (latestExpirationDate ?? .distantPast) {
+                        activeProductID = transaction.productID
+                        latestExpirationDate = transaction.expirationDate
+                    }
                 } else if transaction.isUpgraded {
                     // Upgraded — transaction superseded. Mark original as finished.
                     await transaction.finish()
@@ -180,6 +202,8 @@ final class StoreKitManager: ObservableObject {
         }
 
         // Atomic: update and persist
+        self.activeProductID = activeProductID
+        subscriptionExpirationDate = latestExpirationDate
         updateIsPro(hasActive)
         log.info("Entitlements checked — isPro: \(hasActive)")
     }
@@ -190,18 +214,27 @@ final class StoreKitManager: ObservableObject {
     private func handle(transactionResult: VerificationResult<Transaction>) async -> Transaction? {
         switch transactionResult {
         case .verified(let transaction):
-            // Only grant Pro if not expired
-            let hasExpired = transaction.expirationDate.map { $0 < Date() } ?? false
-            if hasExpired {
-                log.info("Transaction expired — revoking Pro")
-                updateIsPro(false)
-            } else if transaction.isUpgraded {
-                // Upgraded: don't grant from this transaction (superseded)
-                log.info("Transaction upgraded — skipping")
-            } else {
-                log.info("Transaction verified — granting Pro")
-                updateIsPro(true)
+            guard ProductID.allCases.map(\.rawValue).contains(transaction.productID) else {
+                log.warning("Ignoring unknown transaction product: \(transaction.productID)")
+                await transaction.finish()
+                return transaction
             }
+
+            let hasBeenRevoked = transaction.revocationDate != nil
+            let hasExpired = transaction.expirationDate.map { $0 < Date() } ?? false
+            guard !hasBeenRevoked, !hasExpired, !transaction.isUpgraded else {
+                log.info("Transaction inactive — refreshing Pro entitlement")
+                await transaction.finish()
+                await checkEntitlements()
+                return transaction
+            }
+
+            // Grant immediately from the verified purchase result. In local StoreKit
+            // testing, currentEntitlements may briefly lag behind a successful purchase.
+            activeProductID = transaction.productID
+            subscriptionExpirationDate = transaction.expirationDate
+            updateIsPro(true)
+            log.info("Transaction verified — granting Pro")
             await transaction.finish()
             return transaction
 

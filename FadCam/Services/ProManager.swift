@@ -54,36 +54,25 @@ final class ProManager: ObservableObject {
 
     // MARK: - Battery Saver Freemium
 
-    /// Maximum free Battery Saver uses per day. Pro users get unlimited.
-    static let maxFreeSaverUsesPerDay = 3
+    /// Lifetime hard limit. After 5 free uses, user must subscribe.
+    static let maxFreeSaverUsesLifetime = 5
 
-    /// How many saver uses remain today for a free user.
+    private static let saverUseKey = "FadCam.saver.lifetimeUses"
+
+    /// How many lifetime uses remain. Pro = unlimited.
     var saverRemainingUses: Int {
         guard !isPro else { return Int.max }
-        let today = Self.todayKey()
-        let stored = UserDefaults.standard.string(forKey: today) ?? ""
-        let usedToday: Int
-        if let num = Int(stored) { usedToday = num } else { usedToday = 0 }
-        return max(0, Self.maxFreeSaverUsesPerDay - usedToday)
+        let used = UserDefaults.standard.integer(forKey: Self.saverUseKey)
+        return max(0, Self.maxFreeSaverUsesLifetime - used)
     }
 
-    /// Call this when the user activates Battery Saver. Returns true if allowed.
+    /// Call when user confirms Battery Saver activation. Returns true if allowed.
     @discardableResult
     func consumeSaverUse() -> Bool {
         guard !isPro else { return true }
         guard saverRemainingUses > 0 else { return false }
-
-        let today = Self.todayKey()
-        let stored = UserDefaults.standard.string(forKey: today) ?? "0"
-        let current = (Int(stored) ?? 0) + 1
-        UserDefaults.standard.set("\(current)", forKey: today)
+        let used = UserDefaults.standard.integer(forKey: Self.saverUseKey) + 1
+        UserDefaults.standard.set(used, forKey: Self.saverUseKey)
         return true
-    }
-
-    /// "YYYY-MM-DD" key for today's saver use counter.
-    private static func todayKey() -> String {
-        let formatter = DateFormatter()
-        formatter.dateFormat = "yyyy-MM-dd"
-        return "FadCam.saver.uses." + formatter.string(from: Date())
     }
 }

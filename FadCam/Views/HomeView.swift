@@ -89,7 +89,10 @@ struct HomeView: View {
     @State private var showDiscordLink = false
     @State private var showWebsiteLink = false
     @State private var showPaywall = false
+    @State private var showSaverConfirm = false
+    @State private var saverWouldBeLastFreeUse = false
     @AppStorage("previewAreaEnabled") private var previewAreaEnabled = true
+    @StateObject private var proManager = ProManager.shared
 
     // Watermark
     @StateObject private var watermarkSettings = WatermarkSettings.shared
@@ -415,23 +418,29 @@ struct HomeView: View {
                 Spacer()
                 // Right: Pro badge / crown
                 Button {
-                    if !ProManager.shared.isPro {
-                        showPaywall = true
-                    }
+                    showPaywall = true
                 } label: {
                     HStack(spacing: 3) {
                         Image(systemName: "crown.fill").font(.system(size: 10))
-                        Text("Pro").font(.system(size: 12, weight: .bold))
+                        Text("PRO")
+                            .font(.system(size: 11, weight: .heavy))
                     }
-                    .foregroundColor(.black)
+                    .foregroundColor(proManager.isPro ? Color(red: 0.18, green: 0.11, blue: 0.025) : .black)
                     .padding(.horizontal, 10).padding(.vertical, 6)
                     .background(
                         LinearGradient(
-                            colors: [Color(red: 1.0, green: 0.85, blue: 0.2), Color(red: 1.0, green: 0.7, blue: 0.0)],
+                            colors: proManager.isPro
+                                ? [Color(red: 1.0, green: 0.94, blue: 0.65), Color(red: 1.0, green: 0.72, blue: 0.08)]
+                                : [Color(red: 1.0, green: 0.85, blue: 0.2), Color(red: 1.0, green: 0.7, blue: 0.0)],
                             startPoint: .top, endPoint: .bottom
                         )
                     )
                     .clipShape(Capsule())
+                    .overlay(
+                        Capsule()
+                            .stroke(proManager.isPro ? Color.white.opacity(0.65) : .clear, lineWidth: 1)
+                    )
+                    .shadow(color: proManager.isPro ? Color.yellow.opacity(0.32) : .clear, radius: 8)
                 }
             }
         }
@@ -700,16 +709,23 @@ struct HomeView: View {
                             }
                             HStack(spacing: 6) {
                                 Button {
-                                    let proManager = ProManager.shared
-                                    if proManager.isPro || proManager.saverRemainingUses > 0 {
-                                        proManager.consumeSaverUse()
+                                    let pm = ProManager.shared
+                                    if pm.isPro {
+                                        pm.consumeSaverUse()
                                         cameraVM.toggleBatterySaver()
-                                    } else {
+                                    } else if cameraVM.isBatterySaverActive {
+                                        // Already active — toggle off is free
+                                        cameraVM.toggleBatterySaver()
+                                    } else if pm.saverRemainingUses <= 0 {
                                         showPaywall = true
+                                    } else {
+                                        // Show confirmation before consuming a free use
+                                        saverWouldBeLastFreeUse = (pm.saverRemainingUses == 1)
+                                        showSaverConfirm = true
                                     }
                                 } label: {
                                     let active = cameraVM.isBatterySaverActive
-                                    let proManager = ProManager.shared
+                                    let pm = ProManager.shared
                                     VStack(spacing: 1) {
                                         Image(systemName: active ? "moon.fill" : "moon")
                                             .font(.system(size: 12, weight: .medium))
@@ -717,8 +733,8 @@ struct HomeView: View {
                                         Text(active ? "On" : "Saver")
                                             .font(.system(size: 8, weight: .medium))
                                             .foregroundColor(.white.opacity(0.85))
-                                        if !proManager.isPro {
-                                            Text("\(proManager.saverRemainingUses) free")
+                                        if !pm.isPro && !active {
+                                            Text("\(pm.saverRemainingUses) left")
                                                 .font(.system(size: 7))
                                                 .foregroundColor(Color(red: 1.0, green: 0.85, blue: 0.2))
                                         }
@@ -730,6 +746,20 @@ struct HomeView: View {
                                 }
                                 .opacity(cameraVM.recordingState == .recording ? 1 : 0.4)
                                 .disabled(cameraVM.recordingState != .recording)
+                                .alert("Battery Saver", isPresented: $showSaverConfirm) {
+                                    Button("Cancel", role: .cancel) {}
+                                    Button(saverWouldBeLastFreeUse ? "Use Last Free Activation" : "Activate") {
+                                        ProManager.shared.consumeSaverUse()
+                                        cameraVM.toggleBatterySaver()
+                                    }
+                                } message: {
+                                    let pm = ProManager.shared
+                                    if saverWouldBeLastFreeUse {
+                                        Text("This is your last free Battery Saver use. After this, you'll need FadCam Pro to use this feature.\n\nBattery Saver dims your screen to save power while recording continues.")
+                                    } else {
+                                        Text("You have \(pm.saverRemainingUses) free Battery Saver uses remaining. After using all free uses, you'll need FadCam Pro.\n\nBattery Saver dims your screen to save power while recording continues.")
+                                    }
+                                }
                                 previewActionButton(icon: "camera.fill", label: "FadShot") {
                                     cameraVM.capturePhoto()
                                 }
@@ -1056,7 +1086,7 @@ struct HomeView: View {
         GeometryReader { geo in
             ZStack {
                 let positions: [(CGFloat, CGFloat, CGFloat)] = [
-                    (0.1, 0.15, 1.5), (0.85, 0.1, 1.0), (0.5, 0.3, 2.0),
+                    (0.85, 0.1, 1.0), (0.5, 0.3, 2.0),
                     (0.2, 0.5, 1.2), (0.75, 0.6, 1.8), (0.4, 0.8, 1.0),
                     (0.9, 0.4, 1.3), (0.05, 0.7, 1.1), (0.6, 0.15, 1.6),
                     (0.3, 0.35, 1.0), (0.8, 0.85, 1.4), (0.15, 0.9, 1.0),
@@ -1075,6 +1105,19 @@ struct HomeView: View {
         }
     }
 
+    private var sparkles: some View {
+        GeometryReader { geo in
+            ZStack {
+                Image(systemName: "sparkle").font(.system(size: 9)).foregroundColor(.white.opacity(0.4))
+                    .position(x: geo.size.width * 0.25, y: geo.size.height * 0.25)
+                Image(systemName: "sparkle").font(.system(size: 7)).foregroundColor(.white.opacity(0.3))
+                    .position(x: geo.size.width * 0.7, y: geo.size.height * 0.2)
+                Image(systemName: "sparkle").font(.system(size: 11)).foregroundColor(.white.opacity(0.35))
+                    .position(x: geo.size.width * 0.15, y: geo.size.height * 0.7)
+            }
+        }
+    }
+
     private var crescentMoon: some View {
         Circle()
             .fill(Color.white.opacity(0.15))
@@ -1086,21 +1129,6 @@ struct HomeView: View {
                     .blendMode(.destinationOut)
             )
             .compositingGroup()
-    }
-
-    private var sparkles: some View {
-        GeometryReader { geo in
-            ZStack {
-                Image(systemName: "sparkle").font(.system(size: 9)).foregroundColor(.white.opacity(0.4))
-                    .position(x: geo.size.width * 0.25, y: geo.size.height * 0.25)
-                Image(systemName: "sparkle").font(.system(size: 7)).foregroundColor(.white.opacity(0.3))
-                    .position(x: geo.size.width * 0.7, y: geo.size.height * 0.2)
-                Image(systemName: "sparkle").font(.system(size: 11)).foregroundColor(.white.opacity(0.35))
-                    .position(x: geo.size.width * 0.15, y: geo.size.height * 0.7)
-                Image(systemName: "sparkle").font(.system(size: 8)).foregroundColor(.white.opacity(0.3))
-                    .position(x: geo.size.width * 0.85, y: geo.size.height * 0.75)
-            }
-        }
     }
 
     private var sleepingMoon: some View {

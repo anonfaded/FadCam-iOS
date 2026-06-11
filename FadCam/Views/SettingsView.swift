@@ -7,6 +7,7 @@ struct SettingsView: View {
     @AppStorage("hasCompletedOnboarding") private var hasCompletedOnboarding = true
     @StateObject private var watermarkSettings = WatermarkSettings.shared
     @StateObject private var videoSettings = VideoSettings.shared
+    @StateObject private var proManager = ProManager.shared
     @State private var showingAlert = false
     @State private var alertMessage = ""
     @State private var pushVideoSettings = false
@@ -73,7 +74,7 @@ struct SettingsView: View {
                             Label("FadCam Pro", systemImage: "crown.fill")
                                 .foregroundColor(Color(red: 1.0, green: 0.8, blue: 0.1))
                             Spacer()
-                            if ProManager.shared.isPro {
+                            if proManager.isPro {
                                 Image(systemName: "checkmark.seal.fill")
                                     .font(.system(size: 14))
                                     .foregroundColor(.green)
@@ -117,17 +118,27 @@ struct SettingsView: View {
                     }
 
                     Button {
-                        if let url = URL(string: "mailto:contact@fadseclab.com") {
-                            UIApplication.shared.open(url)
+                        if proManager.isPro {
+                            if let url = URL(string: "mailto:contact@fadseclab.com") {
+                                UIApplication.shared.open(url)
+                            }
+                        } else {
+                            showPaywall = true
                         }
                     } label: {
                         HStack {
                             Label("Email Us", systemImage: "envelope")
                                 .foregroundColor(.primary)
                             Spacer()
-                            Image(systemName: "arrow.up.right")
-                                .font(.system(size: 12, weight: .semibold))
-                                .foregroundColor(.secondary)
+                            if proManager.isPro {
+                                Image(systemName: "arrow.up.right")
+                                    .font(.system(size: 12, weight: .semibold))
+                                    .foregroundColor(.secondary)
+                            } else {
+                                Image(systemName: "lock.fill")
+                                    .font(.system(size: 12))
+                                    .foregroundColor(.secondary)
+                            }
                         }
                     }
                 } header: { Text("App Info") }

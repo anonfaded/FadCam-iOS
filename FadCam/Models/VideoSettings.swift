@@ -136,10 +136,13 @@ extension VideoSettings {
         var rawValue: String { "\(width)x\(height)" }
         var shortLabel: String {
             switch height {
-            case 2160: return "4K"
-            case 1080: return "1080p"
-            case 720:  return "720p"
-            default:   return "\(height)p"
+            case 2160:      return "4K UHD"
+            case 1440:      return "QHD"
+            case 1080:      return "1080p FHD"
+            case 720:       return "720p HD"
+            case 480:       return "480p SD"
+            case let h where h > 2160: return "\(height)p"
+            default:        return "\(height)p"
             }
         }
         var label: String { "\(shortLabel) (\(width)×\(height))" }

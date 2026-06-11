@@ -1,6 +1,23 @@
 {
+  "appPolicies" : {
+    "eula" : "",
+    "policies" : [
+      {
+        "locale" : "en_US",
+        "policyText" : "",
+        "policyURL" : ""
+      }
+    ]
+  },
   "identifier" : "FadCamPro",
   "nonRenewingSubscriptions" : [],
+  "products" : [],
+  "settings" : {
+    "_developerTeamID" : "H24VU3ZLBL",
+    "_failTransactionsEnabled" : false,
+    "_locale" : "en_US",
+    "_storefront" : "USA"
+  },
   "subscriptionGroups" : [
     {
       "id" : "FADECAM_PRO",
@@ -10,11 +27,10 @@
         {
           "adHocOffers" : [],
           "codeOffers" : [],
-          "displayPrice" : "$4.99",
+          "displayPrice" : "3.99",
           "familyShareable" : false,
           "groupNumber" : 1,
           "internalID" : "MONTHLY",
-          "introductoryOffers" : [],
           "localizations" : [
             {
               "description" : "Full access to all Pro features: 4K, 60+ fps, custom watermark, and more.",
@@ -23,20 +39,19 @@
             }
           ],
           "productID" : "com.fadseclab.fadcam.pro.monthly",
-          "promotionalOffers" : [],
           "recurringSubscriptionPeriod" : "P1M",
           "referenceName" : "FadCam Pro Monthly",
           "subscriptionGroupID" : "FADECAM_PRO",
-          "type" : "RecurringSubscription"
+          "type" : "RecurringSubscription",
+          "winbackOffers" : []
         },
         {
           "adHocOffers" : [],
           "codeOffers" : [],
-          "displayPrice" : "$29.99",
+          "displayPrice" : "29.99",
           "familyShareable" : false,
           "groupNumber" : 1,
           "internalID" : "YEARLY",
-          "introductoryOffers" : [],
           "localizations" : [
             {
               "description" : "Full access to all Pro features, billed annually. Save 50% vs monthly.",
@@ -45,17 +60,17 @@
             }
           ],
           "productID" : "com.fadseclab.fadcam.pro.yearly",
-          "promotionalOffers" : [],
           "recurringSubscriptionPeriod" : "P1Y",
           "referenceName" : "FadCam Pro Yearly",
           "subscriptionGroupID" : "FADECAM_PRO",
-          "type" : "RecurringSubscription"
+          "type" : "RecurringSubscription",
+          "winbackOffers" : []
         }
       ]
     }
   ],
   "version" : {
-    "major" : 1,
+    "major" : 4,
     "minor" : 0
   }
 }
