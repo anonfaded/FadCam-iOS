@@ -1,0 +1,9 @@
+{
+  "id" : "3bbce15b-100b-445d-af15-02e1af7f59fe",
+  "targets" : [
+    {
+      "id" : "70304dde-07ef-4bd8-b15e-aed006316011",
+      "name" : "FadCam"
+    }
+  ]
+}
