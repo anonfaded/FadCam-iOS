@@ -60,24 +60,23 @@ struct PaywallView: View {
     }
 
     var body: some View {
-        NavigationView {
-            ZStack {
-                background
+        ZStack {
+            background
 
-                if storeManager.isLoadingProducts && !storeManager.productsLoaded {
-                    ProgressView()
-                        .tint(gold)
-                        .scaleEffect(1.15)
-                } else if let error = storeManager.loadError, storeManager.products.isEmpty {
-                    errorView(error)
-                } else {
-                    content
-                }
+            if storeManager.isLoadingProducts && !storeManager.productsLoaded {
+                ProgressView()
+                    .tint(gold)
+                    .scaleEffect(1.15)
+            } else if let error = storeManager.loadError, storeManager.products.isEmpty {
+                errorView(error)
+            } else {
+                content
             }
-            .navigationTitle("")
-            .navigationBarTitleDisplayMode(.inline)
-            .toolbar {
-                ToolbarItem(placement: .navigationBarTrailing) {
+
+            // Close button — pinned top-trailing, no NavigationView needed
+            VStack {
+                HStack {
+                    Spacer()
                     Button { dismiss() } label: {
                         Image(systemName: "xmark")
                             .font(.system(size: 13, weight: .bold))
@@ -86,7 +85,10 @@ struct PaywallView: View {
                             .background(Circle().fill(Color.black.opacity(0.22)))
                             .overlay(Circle().stroke(Color.white.opacity(0.16), lineWidth: 1))
                     }
+                    .padding(.trailing, 18)
+                    .padding(.top, 12)
                 }
+                Spacer()
             }
         }
         .preferredColorScheme(.dark)
@@ -695,14 +697,37 @@ struct PaywallView: View {
 
     private var legalText: some View {
         VStack(spacing: 8) {
-            Text("Payment is charged to your Apple ID. Subscription renews automatically unless canceled at least 24 hours before the current period ends.")
+            // Subscription details — required by App Store Guidelines 3.1.2
+            VStack(spacing: 4) {
+                if let monthly = monthlyProduct {
+                    HStack {
+                        Text("FadCam Pro Monthly")
+                            .font(.system(size: 10, weight: .semibold))
+                        Spacer()
+                        Text("\(monthly.displayPrice)/month")
+                            .font(.system(size: 10, weight: .semibold))
+                    }
+                }
+                if let yearly = yearlyProduct {
+                    HStack {
+                        Text("FadCam Pro Yearly")
+                            .font(.system(size: 10, weight: .semibold))
+                        Spacer()
+                        Text("\(yearly.displayPrice)/year")
+                            .font(.system(size: 10, weight: .semibold))
+                    }
+                }
+            }
+            .foregroundColor(.white.opacity(0.55))
+
+            Text("Payment charged to your Apple ID. Subscription auto-renews unless canceled at least 24 hours before the period ends. Manage in App Store > Account > Subscriptions.")
                 .font(.system(size: 9.5, weight: .medium))
-                .foregroundColor(.white.opacity(0.32))
+                .foregroundColor(.white.opacity(0.40))
                 .multilineTextAlignment(.center)
                 .fixedSize(horizontal: false, vertical: true)
 
             HStack(spacing: 14) {
-                Link("Terms of Use", destination: URL(string: "https://www.apple.com/legal/internet-services/itunes/dev/stdeula/")!)
+                Link("Terms of Use (EULA)", destination: URL(string: "https://www.apple.com/legal/internet-services/itunes/dev/stdeula/")!)
                 Link("Privacy Policy", destination: URL(string: "https://github.com/anonfaded/FadCam-iOS/blob/main/PRIVACY.md")!)
             }
             .font(.system(size: 10, weight: .semibold))

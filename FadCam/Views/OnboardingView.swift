@@ -206,7 +206,7 @@ struct OnboardingView: View {
             } else {
                 VStack(spacing: 4) {
                     Button { Task { await onAllow() } } label: {
-                        Text("Allow")
+                        Text("Continue")
                             .font(.caption.weight(.semibold))
                             .foregroundColor(.white)
                             .padding(.horizontal, 14).padding(.vertical, 7)
@@ -230,15 +230,17 @@ struct OnboardingView: View {
 
     // MARK: - Permission requests
 
+    /// Primary "Continue" action: only requests system permission prompt
+    /// when status is .notDetermined. If already denied, user must tap
+    /// "Open Settings" explicitly — no automatic Settings redirect.
     private func requestCameraDirect() async {
         let status = AVCaptureDevice.authorizationStatus(for: .video)
         switch status {
         case .notDetermined:
             cameraGranted = await AVCaptureDevice.requestAccess(for: .video)
-        case .denied, .restricted:
-            if let url = URL(string: UIApplication.openSettingsURLString) { await UIApplication.shared.open(url) }
         default:
-            cameraGranted = true
+            // Already granted or denied — state is already reflected in UI
+            break
         }
     }
     private func requestCameraSettings() async {
@@ -249,10 +251,8 @@ struct OnboardingView: View {
         switch status {
         case .notDetermined:
             micGranted = await AVCaptureDevice.requestAccess(for: .audio)
-        case .denied, .restricted:
-            if let url = URL(string: UIApplication.openSettingsURLString) { await UIApplication.shared.open(url) }
         default:
-            micGranted = true
+            break
         }
     }
     private func requestMicSettings() async {
@@ -264,10 +264,8 @@ struct OnboardingView: View {
         case .notDetermined:
             let new = await PHPhotoLibrary.requestAuthorization(for: .addOnly)
             photoGranted = (new == .authorized || new == .limited)
-        case .denied, .restricted:
-            if let url = URL(string: UIApplication.openSettingsURLString) { await UIApplication.shared.open(url) }
         default:
-            photoGranted = true
+            break
         }
     }
     private func requestPhotoSettings() async {
